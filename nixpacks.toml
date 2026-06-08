@@ -1,24 +1,3 @@
+# Nixpacks configuration for Baileys (no chromium needed)
 [phases.setup]
-nixPkgs = [
-  "...",
-  "chromium",
-  "libGL",
-  "libxkbcommon",
-  "nss",
-  "nspr",
-  "atk",
-  "cups",
-  "libdrm",
-  "libXcomposite",
-  "libXdamage",
-  "libXfixes",
-  "libXrandr",
-  "mesa",
-  "alsa-lib",
-  "pango",
-  "cairo"
-]
-
-[variables]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "chromium"
+nixPkgs = ["..."]
