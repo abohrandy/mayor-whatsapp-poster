@@ -34,7 +34,7 @@ app.use(express.static(path.join(__dirname, 'admin-dashboard/dist')));
 app.use('/api', apiRoutes);
 
 // SPA routing fallback
-app.get('/:any(.*)', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'admin-dashboard/dist/index.html'));
 });
 
