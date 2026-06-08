@@ -1,0 +1,30 @@
+{
+  "name": "mayor-whatsapp-poster",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "npm install --prefix admin-dashboard && npm run build --prefix admin-dashboard",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-fileupload": "^1.5.2",
+    "lodash": "^4.17.23",
+    "node-cron": "^4.2.1",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.34.5",
+    "socket.io": "^4.8.3",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "whatsapp-web.js": "^1.34.6"
+  }
+}

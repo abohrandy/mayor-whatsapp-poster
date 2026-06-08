@@ -1,0 +1,9 @@
+node_modules/
+.env
+uploads/*
+*.sqlite
+.wwebjs_auth/
+.wwebjs_cache/
+**/.wwebjs_auth*/
+**/node_modules/
+**/dist/
