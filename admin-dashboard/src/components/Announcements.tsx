@@ -75,6 +75,7 @@ const Announcements = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [postingId, setPostingId] = useState<number | null>(null);
 
@@ -114,6 +115,15 @@ const Announcements = () => {
     } finally { setGroupsLoading(false); }
   };
 
+  const fetchProfiles = async () => {
+    try {
+      const res = await axios.get(`${API}/profiles`);
+      setProfiles(res.data);
+    } catch (e) {
+      console.error('Failed to fetch profiles', e);
+    }
+  };
+
   const openModal = (ann?: Announcement) => {
     if (ann) {
       setEditingId(ann.id);
@@ -134,6 +144,7 @@ const Announcements = () => {
     }
     setNewFiles([]);
     fetchGroups();
+    fetchProfiles();
     setShowModal(true);
   };
 
@@ -522,6 +533,34 @@ const Announcements = () => {
                     Refresh
                   </button>
                 </div>
+
+                {/* Profile Quick Select */}
+                {profiles.length > 0 && (
+                  <div className="flex items-center gap-2 bg-slate-900/30 border border-slate-800 rounded-lg p-2">
+                    <span className="text-xs text-slate-400 font-medium">Apply Profile:</span>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const prof = profiles.find(p => p.id.toString() === val);
+                          if (prof) {
+                            setForm(prev => ({
+                              ...prev,
+                              target_groups: prof.groups
+                            }));
+                          }
+                        }
+                      }}
+                      className="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      defaultValue=""
+                    >
+                      <option value="">-- Select Profile --</option>
+                      {profiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.groups.length} groups)</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {groupsLoading && <p className="text-xs text-slate-500">Loading groups...</p>}
 

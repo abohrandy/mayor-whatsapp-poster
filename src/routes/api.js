@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const announcementController = require('../controllers/announcementController');
 const settingsController = require('../controllers/settingsController');
+const profileController = require('../controllers/profileController');
 const waClient = require('../services/whatsapp');
 
 // ── Announcements ────────────────────────────────────────────────────────────
@@ -80,5 +81,10 @@ router.get('/logs', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ── Posting Profiles ─────────────────────────────────────────────────────────
+router.get('/profiles', profileController.list);
+router.post('/profiles', profileController.create);
+router.delete('/profiles/:id', profileController.delete);
 
 module.exports = router;

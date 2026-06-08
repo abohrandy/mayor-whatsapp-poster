@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, History } from 'lucide-react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Announcements from './components/Announcements';
 import WhatsAppStatus from './components/WhatsAppStatus';
 import Settings from './components/Settings';
 import ActivityLogs from './components/ActivityLogs';
+import PostingProfiles from './components/PostingProfiles';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -13,6 +14,7 @@ function App() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard setActiveTab={setActiveTab} />;
       case 'announcements': return <Announcements />;
+      case 'profiles': return <PostingProfiles />;
       case 'activity': return <ActivityLogs />;
       case 'whatsapp': return <WhatsAppStatus />;
       case 'settings': return <Settings />;
@@ -23,6 +25,7 @@ function App() {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
     { id: 'announcements', label: 'Announcements', Icon: Megaphone },
+    { id: 'profiles', label: 'Posting Profiles', Icon: Users },
     { id: 'activity', label: 'Activity Logs', Icon: History },
     { id: 'whatsapp', label: 'WhatsApp Status', Icon: MessageSquare },
     { id: 'settings', label: 'Settings', Icon: SettingsIcon },
@@ -31,6 +34,7 @@ function App() {
   const tabLabels: Record<string, string> = {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
+    profiles: 'Posting Profiles',
     activity: 'Activity Logs',
     whatsapp: 'WhatsApp Status',
     settings: 'Settings',

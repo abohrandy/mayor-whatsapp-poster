@@ -58,6 +58,16 @@ async function initDb() {
         )
     `);
 
+    // Posting profiles
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS posting_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            groups TEXT NOT NULL DEFAULT '[]',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     console.log('Database initialized successfully.');
     return db;
 }
