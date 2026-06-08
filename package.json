@@ -8,9 +8,6 @@
     "build": "npm install --prefix admin-dashboard && npm run build --prefix admin-dashboard",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "engines": {
-    "node": "20.x"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -19,7 +16,7 @@
     "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1",
+    "express": "^4.21.2",
     "express-fileupload": "^1.5.2",
     "lodash": "^4.17.23",
     "node-cron": "^4.2.1",
