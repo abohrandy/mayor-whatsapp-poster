@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
@@ -36,10 +36,8 @@ class WhatsAppClient {
             this.store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 
             const { state, saveCreds } = await useMultiFileAuthState(authPath);
-            const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
             const sock = makeWASocket({
-                version,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false,
                 auth: state,
