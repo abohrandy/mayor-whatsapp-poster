@@ -57,16 +57,11 @@ router.post('/whatsapp/send-test', async (req, res) => {
 // Returns all chats (groups + individual) the WA account is part of
 router.get('/whatsapp/chats', async (req, res) => {
     try {
-        if (!waClient.client || waClient.status !== 'CONNECTED') {
+        if (waClient.status !== 'CONNECTED') {
             return res.status(400).json({ error: 'WhatsApp is not connected' });
         }
-        const chats = await waClient.client.getChats();
-        const simplified = chats.map(c => ({
-            id: c.id._serialized,
-            name: c.name || c.id.user,
-            isGroup: c.isGroup
-        }));
-        res.json(simplified);
+        const chats = await waClient.getChats();
+        res.json(chats);
     } catch (error) {
         console.error('Error getting chats:', error);
         res.status(500).json({ error: error.message });
