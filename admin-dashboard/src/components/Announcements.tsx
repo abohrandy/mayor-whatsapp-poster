@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, Trash2, Edit2, X, Send, Film,
   RefreshCw, ToggleLeft, ToggleRight, Clock, Users, Repeat, Calendar,
-  Video, UploadCloud
+  Video, UploadCloud, Eye, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -78,6 +78,8 @@ const Announcements = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [postingId, setPostingId] = useState<number | null>(null);
+  const [previewAnn, setPreviewAnn] = useState<Announcement | null>(null);
+  const [previewMediaIndex, setPreviewMediaIndex] = useState<number>(0);
 
   const defaultForm = {
     title: '',
@@ -329,6 +331,15 @@ const Announcements = () => {
     finally { setPostingId(null); }
   };
 
+  const openPreview = (ann: Announcement) => {
+    setPreviewAnn(ann);
+    setPreviewMediaIndex(0);
+  };
+
+  const closePreview = () => {
+    setPreviewAnn(null);
+  };
+
   const filtered = announcements.filter(a =>
     a.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -419,6 +430,9 @@ const Announcements = () => {
                     className="p-2 text-green-400 hover:text-white hover:bg-green-500/20 rounded-lg transition-colors"
                   >
                     {postingId === ann.id ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
+                  </button>
+                   <button onClick={() => openPreview(ann)} title="Preview Layout" className="p-2 text-indigo-400 hover:text-white hover:bg-indigo-500/20 rounded-lg transition-colors cursor-pointer">
+                    <Eye size={15} />
                   </button>
                   <button onClick={() => openModal(ann)} title="Edit" className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
                     <Edit2 size={15} />
@@ -711,6 +725,102 @@ const Announcements = () => {
           </div>
         </div>
       )}
+
+      {/* ── Preview Modal (WhatsApp mockup) ─────────────────────────────────── */}
+      {previewAnn && (() => {
+        const files = parseJSON<MediaFile[]>(previewAnn.media_files, []);
+        const media = files.length > 0 ? files[previewMediaIndex % files.length] : null;
+        
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-md overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-900">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Announcement Preview</h3>
+                  <p className="text-xs text-slate-400">Mockup of how this appears on WhatsApp</p>
+                </div>
+                <button onClick={closePreview} className="text-slate-500 hover:text-white cursor-pointer">
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Chat Area Background */}
+              <div className="flex-1 p-6 bg-slate-950/80 min-h-[350px] flex flex-col justify-end relative overflow-y-auto"
+                   style={{
+                     backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(0, 92, 75, 0.1) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.05) 0%, transparent 40%)'
+                   }}>
+                
+                {/* Simulated Chat bubble */}
+                <div className="max-w-[85%] bg-[#005c4b] text-white rounded-xl rounded-tr-none p-2 shadow-lg relative ml-auto flex flex-col gap-1.5 border border-emerald-500/20">
+                  {/* Media Content */}
+                  {media && (
+                    <div className="relative rounded-lg overflow-hidden bg-black/30 border border-emerald-600/30 max-h-64 flex items-center justify-center">
+                      {media.type === 'image' ? (
+                        <img src={`/${media.path}`} alt="" className="object-contain max-h-64 w-full" />
+                      ) : (
+                        <div className="relative w-full h-48 bg-slate-900/50 flex flex-col items-center justify-center">
+                          <Video size={48} className="text-emerald-400 mb-2" />
+                          <span className="text-xs text-slate-400">Video Attachment</span>
+                        </div>
+                      )}
+
+                      {/* Carousel buttons */}
+                      {files.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewMediaIndex(prev => (prev - 1 + files.length) % files.length);
+                            }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white cursor-pointer transition-colors"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewMediaIndex(prev => (prev + 1) % files.length);
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white cursor-pointer transition-colors"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                          <span className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded text-[10px] text-white/90">
+                            {previewMediaIndex + 1} / {files.length}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Caption Message */}
+                  <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap px-1">
+                    {previewAnn.caption || previewAnn.title}
+                  </p>
+
+                  {/* Meta Time info */}
+                  <div className="flex items-center gap-1 self-end text-[10px] text-emerald-300/80 font-medium select-none">
+                    <span>
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-sky-300 font-bold">✓✓</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Footer */}
+              <div className="p-4 border-t border-slate-700/50 bg-slate-900 flex justify-end">
+                <button onClick={closePreview} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all cursor-pointer">
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
