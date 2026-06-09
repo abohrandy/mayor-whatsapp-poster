@@ -12,7 +12,7 @@ const ActivityLogs = () => {
 
     const fetchLogs = async () => {
         try {
-            const res = await axios.get('http://localhost:3000/api/logs');
+            const res = await axios.get('/api/logs');
             setLogs(res.data);
         } catch (error) {
             console.error('Failed to fetch logs:', error);
