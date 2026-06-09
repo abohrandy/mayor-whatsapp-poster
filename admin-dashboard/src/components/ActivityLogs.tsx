@@ -5,12 +5,18 @@ import axios from 'axios';
 const ActivityLogs = () => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
-        fetchLogs();
+        fetchLogs(true);
     }, []);
 
-    const fetchLogs = async () => {
+    const fetchLogs = async (showMainLoader = false) => {
+        if (showMainLoader) {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
         try {
             const res = await axios.get('/api/logs');
             setLogs(res.data);
@@ -18,6 +24,7 @@ const ActivityLogs = () => {
             console.error('Failed to fetch logs:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -45,8 +52,12 @@ const ActivityLogs = () => {
                         <p className="text-slate-400">System operations and action history</p>
                     </div>
                 </div>
-                <button onClick={fetchLogs} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-slate-700/50 flex items-center gap-2 text-sm font-medium">
-                    <History size={16} /> Refresh
+                <button 
+                    onClick={() => fetchLogs(false)} 
+                    disabled={refreshing}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-slate-700/50 flex items-center gap-2 text-sm font-medium disabled:opacity-50 cursor-pointer"
+                >
+                    <History size={16} className={refreshing ? 'animate-spin' : ''} /> Refresh
                 </button>
             </div>
 
