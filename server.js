@@ -25,7 +25,10 @@ app.use(fileUpload({
 }));
 
 // Static files for uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const uploadsPath = process.env.DATA_DIR
+    ? path.join(process.env.DATA_DIR, 'uploads')
+    : path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
 
 // Serve frontend assets
 app.use(express.static(path.join(__dirname, 'admin-dashboard/dist')));
