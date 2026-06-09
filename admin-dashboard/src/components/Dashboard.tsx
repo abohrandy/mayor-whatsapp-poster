@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Wifi, ArrowUpRight, FileText } from 'lucide-react';
+import { Calendar, Wifi, ArrowUpRight, FileText, Send, RefreshCw } from 'lucide-react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 
@@ -26,6 +26,7 @@ const Dashboard = ({ setActiveTab }: any) => {
     });
     const [upcoming, setUpcoming] = useState([]);
     const [logs, setLogs] = useState([]);
+    const [postingId, setPostingId] = useState<number | null>(null);
 
     const fetchData = async () => {
         try {
@@ -52,6 +53,20 @@ const Dashboard = ({ setActiveTab }: any) => {
             setLogs(logsRes.data.slice(0, 5));
         } catch (error) {
             console.error('Failed to fetch dashboard data:', error);
+        }
+    };
+
+    const handlePostNow = async (id: number) => {
+        if (!window.confirm('Post this announcement to all target groups right now?')) return;
+        setPostingId(id);
+        try {
+            await axios.post(`/api/announcements/${id}/post-now`);
+            alert('Post initiated! Check Activity Logs for status.');
+            fetchData();
+        } catch {
+            alert('Failed to initiate post.');
+        } finally {
+            setPostingId(null);
         }
     };
 
@@ -119,9 +134,19 @@ const Dashboard = ({ setActiveTab }: any) => {
                                         </p>
                                     </div>
                                 </div>
-                                <span className="text-xs font-medium text-slate-400 bg-slate-800/50 px-2 py-1 rounded">
-                                    {new Date(ann.next_post_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs font-medium text-slate-400 bg-slate-800/50 px-2 py-1 rounded">
+                                        {new Date(ann.next_post_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <button
+                                        onClick={() => handlePostNow(ann.id)}
+                                        disabled={postingId === ann.id}
+                                        title="Post Now"
+                                        className="p-2 text-green-400 hover:text-white hover:bg-green-500/20 rounded-lg transition-colors cursor-pointer"
+                                    >
+                                        {postingId === ann.id ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
+                                    </button>
+                                </div>
                             </div>
                         ))}
                         {upcoming.length === 0 && (

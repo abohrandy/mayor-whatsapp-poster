@@ -232,6 +232,59 @@ const Announcements = () => {
     } finally { setSubmitting(false); }
   };
 
+  const handleSaveAndPostNow = async () => {
+    if (form.target_groups.length === 0) {
+      alert('Please select at least one target group.');
+      return;
+    }
+    if (newFiles.length === 0 && existingMedia.length === 0) {
+      alert('Please upload at least one image or video.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append('title', form.title);
+      fd.append('caption', form.caption);
+      fd.append('is_recurring', form.is_recurring ? '1' : '0');
+      fd.append('post_time', form.post_time);
+      fd.append('target_groups', JSON.stringify(form.target_groups));
+      fd.append('keep_media', '1');
+
+      if (form.is_recurring) {
+        fd.append('recurrence_days', String(form.recurrence_days));
+        const d = new Date();
+        const [h, m] = form.post_time.split(':').map(Number);
+        d.setHours(h, m, 0, 0);
+        if (d <= new Date()) d.setDate(d.getDate() + (form.recurrence_days || 1));
+        fd.append('next_post_at', d.toISOString());
+      } else {
+        fd.append('recurrence_days', '');
+        fd.append('next_post_at', form.next_post_at ? new Date(form.next_post_at).toISOString() : '');
+      }
+
+      for (const f of newFiles) fd.append('media_files', f);
+
+      let targetId = editingId;
+      if (editingId) {
+        await axios.put(`${API}/announcements/${editingId}`, fd);
+      } else {
+        const res = await axios.post(`${API}/announcements`, fd);
+        targetId = res.data.id;
+      }
+
+      if (targetId) {
+        await axios.post(`${API}/announcements/${targetId}/post-now`);
+        alert('Announcement saved and posting initiated! Check Activity Logs for status.');
+      }
+      closeModal();
+      fetchAnnouncements();
+    } catch (err) {
+      alert('Failed to save and post announcement. Please try again.');
+    } finally { setSubmitting(false); }
+  };
+
   const handleDelete = async (id: number) => {
     if (!window.confirm('Delete this announcement?')) return;
     await axios.delete(`${API}/announcements/${id}`);
@@ -604,11 +657,16 @@ const Announcements = () => {
               {/* Footer */}
               <div className="pt-4 border-t border-slate-700/50 flex justify-end gap-3">
                 <button type="button" onClick={closeModal}
-                  className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:text-white transition-colors">
+                  className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:text-white transition-colors cursor-pointer">
                   Cancel
                 </button>
+                <button type="button" onClick={handleSaveAndPostNow} disabled={submitting}
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-60 cursor-pointer">
+                  {submitting && <RefreshCw size={16} className="animate-spin" />}
+                  Post Now
+                </button>
                 <button type="submit" disabled={submitting}
-                  className="px-6 py-2 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-60">
+                  className="px-6 py-2 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-60 cursor-pointer">
                   {submitting && <RefreshCw size={16} className="animate-spin" />}
                   {editingId ? 'Save Changes' : 'Create Announcement'}
                 </button>
