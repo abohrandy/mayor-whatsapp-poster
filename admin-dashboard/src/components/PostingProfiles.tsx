@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Plus, Save, X, Search, CheckSquare, Square } from 'lucide-react';
+import { Users, Trash2, Plus, Save, X, Search, CheckSquare, Square, Edit2 } from 'lucide-react';
 import axios from 'axios';
 
 interface Group {
@@ -19,8 +19,9 @@ const PostingProfiles = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Create Profile state
+  // Create / Edit Profile state
   const [isCreating, setIsCreating] = useState(false);
+  const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
   const [profileName, setProfileName] = useState('');
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +48,7 @@ const PostingProfiles = () => {
     }
   };
 
-  const handleCreateProfile = async (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profileName.trim()) {
       alert('Please enter a profile name.');
@@ -59,17 +60,37 @@ const PostingProfiles = () => {
     }
 
     try {
-      const res = await axios.post(`${API}/profiles`, {
-        name: profileName.trim(),
-        groups: selectedGroups
-      });
-      setProfiles(prev => [...prev, res.data]);
-      setProfileName('');
-      setSelectedGroups([]);
-      setIsCreating(false);
+      if (editingProfileId !== null) {
+        const res = await axios.put(`${API}/profiles/${editingProfileId}`, {
+          name: profileName.trim(),
+          groups: selectedGroups
+        });
+        setProfiles(prev => prev.map(p => p.id === editingProfileId ? res.data : p));
+      } else {
+        const res = await axios.post(`${API}/profiles`, {
+          name: profileName.trim(),
+          groups: selectedGroups
+        });
+        setProfiles(prev => [...prev, res.data]);
+      }
+      handleCancel();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to create profile');
+      alert(error.response?.data?.error || 'Failed to save profile');
     }
+  };
+
+  const handleStartEdit = (profile: Profile) => {
+    setEditingProfileId(profile.id);
+    setProfileName(profile.name);
+    setSelectedGroups(profile.groups);
+    setIsCreating(true);
+  };
+
+  const handleCancel = () => {
+    setIsCreating(false);
+    setEditingProfileId(null);
+    setProfileName('');
+    setSelectedGroups([]);
   };
 
   const handleDeleteProfile = async (id: number, name: string) => {
@@ -121,16 +142,14 @@ const PostingProfiles = () => {
       </div>
 
       {isCreating && (
-        <form onSubmit={handleCreateProfile} className="glass-card p-6 space-y-6">
+        <form onSubmit={handleSaveProfile} className="glass-card p-6 space-y-6">
           <div className="flex justify-between items-center border-b border-slate-700/50 pb-4">
-            <h3 className="text-lg font-semibold text-white">Create New Profile</h3>
+            <h3 className="text-lg font-semibold text-white">
+              {editingProfileId !== null ? 'Edit Profile' : 'Create New Profile'}
+            </h3>
             <button
               type="button"
-              onClick={() => {
-                setIsCreating(false);
-                setProfileName('');
-                setSelectedGroups([]);
-              }}
+              onClick={handleCancel}
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X size={20} />
@@ -209,11 +228,7 @@ const PostingProfiles = () => {
           <div className="flex justify-end gap-3 border-t border-slate-700/50 pt-4">
             <button
               type="button"
-              onClick={() => {
-                setIsCreating(false);
-                setProfileName('');
-                setSelectedGroups([]);
-              }}
+              onClick={handleCancel}
               className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer"
             >
               Cancel
@@ -259,13 +274,22 @@ const PostingProfiles = () => {
                     {p.groups.length} {p.groups.length === 1 ? 'group' : 'groups'} included
                   </span>
                 </div>
-                <button
-                  onClick={() => handleDeleteProfile(p.id, p.name)}
-                  className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors cursor-pointer"
-                  title="Delete Profile"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleStartEdit(p)}
+                    className="p-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                    title="Edit Profile"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteProfile(p.id, p.name)}
+                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors cursor-pointer"
+                    title="Delete Profile"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Display group names snippet */}

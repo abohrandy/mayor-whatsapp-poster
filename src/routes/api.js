@@ -85,6 +85,7 @@ router.get('/logs', async (req, res) => {
 // ── Posting Profiles ─────────────────────────────────────────────────────────
 router.get('/profiles', profileController.list);
 router.post('/profiles', profileController.create);
+router.put('/profiles/:id', profileController.update);
 router.delete('/profiles/:id', profileController.delete);
 
 module.exports = router;
