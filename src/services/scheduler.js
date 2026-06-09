@@ -90,10 +90,18 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
 
     const caption = ann.caption || ann.title;
 
-    // Send to ALL target groups simultaneously
-    const sendResults = await Promise.allSettled(
-        targetGroups.map(groupId => sendToGroup(groupId, mediaEntry, caption))
-    );
+    // Send to ALL target groups sequentially with a delay to prevent timeouts/congestion
+    const sendResults = [];
+    for (const groupId of targetGroups) {
+        try {
+            await sendToGroup(groupId, mediaEntry, caption);
+            sendResults.push({ status: 'fulfilled' });
+        } catch (err) {
+            sendResults.push({ status: 'rejected', reason: err });
+        }
+        // 1.5-second delay between sending to groups to avoid rate-limiting and timeouts
+        await new Promise(resolve => setTimeout(resolve, 1500));
+    }
 
     const succeeded = sendResults.filter(r => r.status === 'fulfilled').length;
     const failed = sendResults.filter(r => r.status === 'rejected').length;
