@@ -183,8 +183,12 @@ const announcementController = {
             if (ann) {
                 // Delete uploaded files
                 const files = JSON.parse(ann.media_files || '[]');
+                const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
                 for (const f of files) {
-                    if (f.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+                    if (f.path) {
+                        const fullPath = path.isAbsolute(f.path) ? f.path : path.resolve(baseDir, f.path);
+                        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+                    }
                 }
             }
 
@@ -223,7 +227,11 @@ const announcementController = {
             const idx = parseInt(media_index);
             if (idx >= 0 && idx < files.length) {
                 const f = files[idx];
-                if (f.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+                if (f.path) {
+                    const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
+                    const fullPath = path.isAbsolute(f.path) ? f.path : path.resolve(baseDir, f.path);
+                    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+                }
                 files.splice(idx, 1);
             }
 

@@ -172,7 +172,12 @@ class WhatsAppClient {
             throw new Error('WhatsApp is not connected.');
         }
 
-        const absPath = path.resolve(filePath);
+        // Resolve absolute path respecting DATA_DIR persistent storage if configured
+        const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
+        const absPath = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(baseDir, filePath);
+
         if (!fs.existsSync(absPath)) {
             throw new Error(`Media file not found: ${absPath}`);
         }
