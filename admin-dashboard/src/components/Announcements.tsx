@@ -733,9 +733,9 @@ const Announcements = () => {
         
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="glass-card w-full max-w-md overflow-hidden flex flex-col">
+            <div className="glass-card w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-900">
+              <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-900 flex-shrink-0">
                 <div>
                   <h3 className="text-lg font-bold text-white">Announcement Preview</h3>
                   <p className="text-xs text-slate-400">Mockup of how this appears on WhatsApp</p>
@@ -746,7 +746,7 @@ const Announcements = () => {
               </div>
 
               {/* Chat Area Background */}
-              <div className="flex-1 p-6 bg-slate-950/80 min-h-[350px] flex flex-col justify-end relative overflow-y-auto"
+              <div className="flex-1 p-6 bg-slate-950/80 overflow-y-auto relative flex flex-col justify-start"
                    style={{
                      backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(0, 92, 75, 0.1) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.05) 0%, transparent 40%)'
                    }}>
@@ -812,7 +812,7 @@ const Announcements = () => {
               </div>
 
               {/* Close Footer */}
-              <div className="p-4 border-t border-slate-700/50 bg-slate-900 flex justify-end">
+              <div className="p-4 border-t border-slate-700/50 bg-slate-900 flex justify-end flex-shrink-0">
                 <button onClick={closePreview} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-all cursor-pointer">
                   Close Preview
                 </button>
