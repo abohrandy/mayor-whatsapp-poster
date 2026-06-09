@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, Trash2, Edit2, X, Send, Film,
   RefreshCw, ToggleLeft, ToggleRight, Clock, Users, Repeat, Calendar,
-  Video
+  Video, UploadCloud
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -95,6 +95,29 @@ const Announcements = () => {
   // Existing media files (when editing)
   const [existingMedia, setExistingMedia] = useState<MediaFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files).filter(
+        f => f.type.startsWith('image/') || f.type.startsWith('video/')
+      );
+      if (droppedFiles.length > 0) {
+        setNewFiles(prev => [...prev, ...droppedFiles]);
+      }
+    }
+  };
 
   useEffect(() => { fetchAnnouncements(); }, []);
 
@@ -506,10 +529,23 @@ const Announcements = () => {
                   </div>
                 )}
 
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 border border-dashed border-slate-600 rounded-lg text-slate-400 hover:text-white hover:border-primary transition-colors text-sm">
-                  <Plus size={16} /> Add Images / Videos
-                </button>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
+                    isDragging
+                      ? 'border-primary bg-primary/10 text-white'
+                      : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-500 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <UploadCloud size={32} className={`mb-2 ${isDragging ? 'text-primary' : 'text-slate-500'}`} />
+                  <p className="text-sm font-semibold text-center">
+                    Drag &amp; drop images or videos here, or <span className="text-primary hover:underline">browse</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Supports PNG, JPG, JPEG, MP4, AVI, MKV, etc.</p>
+                </div>
                 <input ref={fileInputRef} type="file" multiple accept="image/*,video/*"
                   className="hidden" onChange={handleFileAdd} />
                 <p className="text-xs text-slate-500">
