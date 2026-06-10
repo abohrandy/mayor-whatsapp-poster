@@ -37,12 +37,7 @@ class WhatsAppClient {
 
             const { state, saveCreds } = await useMultiFileAuthState(authPath);
             
-            // Fetch the latest WA Web version dynamically
-            const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1017531287] }));
-            console.log(`Using WhatsApp Web version: ${version.join('.')}`);
-
             const sock = makeWASocket({
-                version,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false,
                 auth: state,
