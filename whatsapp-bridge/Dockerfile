@@ -1,8 +1,7 @@
 FROM golang:1.25 AS builder
 WORKDIR /app
-COPY go.mod ./
-RUN go mod tidy
 COPY . .
+RUN go mod tidy
 RUN go build -ldflags="-w -s" -o out .
 
 FROM debian:bookworm-slim
