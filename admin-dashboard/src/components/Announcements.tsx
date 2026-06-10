@@ -215,10 +215,6 @@ const Announcements = () => {
       alert('Please select at least one target group.');
       return;
     }
-    if (newFiles.length === 0 && existingMedia.length === 0) {
-      alert('Please upload at least one image or video.');
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -260,10 +256,6 @@ const Announcements = () => {
   const handleSaveAndPostNow = async () => {
     if (form.target_groups.length === 0) {
       alert('Please select at least one target group.');
-      return;
-    }
-    if (newFiles.length === 0 && existingMedia.length === 0) {
-      alert('Please upload at least one image or video.');
       return;
     }
 
@@ -494,7 +486,7 @@ const Announcements = () => {
               {/* ── Media Ribbon ─────────────────────────────────────────────── */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
-                  <Film size={15} /> Media Ribbon (Images &amp; Videos) *
+                  <Film size={15} /> Media Ribbon (Images &amp; Videos) (Optional)
                 </label>
 
                 {/* Existing media (editing) */}

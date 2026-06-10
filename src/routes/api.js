@@ -69,6 +69,34 @@ router.get('/whatsapp/chats', async (req, res) => {
     }
 });
 
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+router.get('/diagnostics', async (req, res) => {
+    try {
+        const { initDb } = require('../models/database');
+        const db = await initDb();
+        const announcementsCount = await db.get('SELECT COUNT(*) as count FROM announcements');
+        const profilesCount = await db.get('SELECT COUNT(*) as count FROM posting_profiles');
+        const logsCount = await db.get('SELECT COUNT(*) as count FROM activity_logs');
+        
+        res.json({
+            whatsappStatus: waClient.getStatus(),
+            database: {
+                announcements: announcementsCount.count,
+                profiles: profilesCount.count,
+                logs: logsCount.count
+            },
+            env: {
+                nodeVersion: process.version,
+                platform: process.platform,
+                hasDataDir: !!process.env.DATA_DIR,
+                dataDir: process.env.DATA_DIR || 'not set'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ── Activity Logs ─────────────────────────────────────────────────────────────
 router.get('/logs', async (req, res) => {
     try {
