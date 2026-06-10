@@ -1,12 +1,8 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const fs = require('fs');
+const axios = require('axios');
 const path = require('path');
-const mime = require('mime-types');
-const qrcode = require('qrcode-terminal');
+const fs = require('fs');
 
-console.log('--- WHATSAPP SERVICE MODULE LOADED (BAILEYS) at ' + new Date().toLocaleTimeString() + ' ---');
-const { emitStatus, emitLog } = require('./socket');
+console.log('--- WHATSAPP SERVICE PROXY LOADED (GO BRIDGE) at ' + new Date().toLocaleTimeString() + ' ---');
 
 class WhatsAppClient {
     constructor() {
@@ -14,99 +10,52 @@ class WhatsAppClient {
         this.qrText = '';
         this.lastError = null;
         this.initialized = false;
-        this.sock = null;
-        this.store = null;
+        this.bridgeUrl = process.env.WHATSAPP_BRIDGE_URL || 'http://localhost:8080';
     }
 
     async init() {
         if (this.initialized) {
-            console.log('WhatsApp Client already initialized, skipping...');
+            console.log('WhatsApp Client Proxy already initialized, skipping...');
             return;
         }
         this.initialized = true;
 
-        const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
-        const authPath = path.join(baseDir, 'wa_auth_persistent');
+        console.log(`[Proxy] Syncing connection with Go Whatsmeow Bridge at ${this.bridgeUrl}...`);
         
-        console.log('WhatsApp Client initializing (Baileys)...');
-        emitLog({ type: 'info', message: 'Initializing Baileys connection...', timestamp: new Date().toISOString() });
+        // Initial sync
+        this.syncStatus();
+        
+        // Sync status from Go Whatsmeow Bridge periodically
+        setInterval(() => this.syncStatus(), 3000);
+    }
 
+    async syncStatus() {
         try {
-            // Setup Store to track chats
-            this.store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
+            const res = await axios.get(`${this.bridgeUrl}/status`);
+            const { status, qrText, lastError } = res.data;
 
-            const { state, saveCreds } = await useMultiFileAuthState(authPath);
-            
-            const sock = makeWASocket({
-                logger: pino({ level: 'silent' }),
-                printQRInTerminal: false,
-                auth: state,
-                browser: ["Mayor WhatsApp Poster", "Safari", "3.0"],
-            });
+            if (this.status !== status || this.qrText !== qrText || this.lastError !== lastError) {
+                const oldStatus = this.status;
+                this.status = status || 'DISCONNECTED';
+                this.qrText = qrText || '';
+                this.lastError = lastError || null;
 
-            this.sock = sock;
-            this.store.bind(sock.ev);
+                const { emitStatus, emitLog } = require('./socket');
+                emitStatus(this.getStatus());
 
-            sock.ev.on('creds.update', saveCreds);
-
-            sock.ev.on('connection.update', async (update) => {
-                const { connection, lastDisconnect, qr } = update;
-
-                if (qr) {
-                    this.status = 'AUTH_REQUIRED';
-                    this.qrText = qr;
-                    console.log('QR RECEIVED');
-                    emitLog({ type: 'info', message: 'QR Code received, waiting for scan...', timestamp: new Date().toISOString() });
-                    qrcode.generate(qr, { small: true });
-                    emitStatus(this.getStatus());
+                if (this.status === 'CONNECTED' && oldStatus !== 'CONNECTED') {
+                    emitLog({ type: 'success', message: 'WhatsApp Client is connected via Go Bridge!', timestamp: new Date().toISOString() });
                 }
-
-                if (connection === 'close') {
-                    const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-                    const errMessage = (lastDisconnect?.error)?.message || 'No error message';
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                    
-                    console.log(`Connection closed (status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
-                    this.status = 'DISCONNECTED';
-                    this.initialized = false;
-                    emitStatus(this.getStatus());
-
-                    // Log the disconnection details to the activity log database
-                    const { logActivity } = require('../models/database');
-                    logActivity('connection_failed', `WhatsApp connection closed. Status Code: ${statusCode}, Error: ${errMessage}. Reconnecting: ${shouldReconnect}`).catch(console.error);
-                    
-                    if (shouldReconnect) {
-                        emitLog({ type: 'warning', message: `Connection closed (status ${statusCode}), reconnecting...`, timestamp: new Date().toISOString() });
-                        // Brief delay before reconnecting to prevent loops
-                        setTimeout(() => this.init(), 5000);
-                    } else {
-                        this.lastError = `Logged out from WhatsApp session (status: ${statusCode}).`;
-                        emitLog({ type: 'error', message: 'WhatsApp Client logged out. Reconnection required.', timestamp: new Date().toISOString() });
-                        
-                        // Clear auth folder on logout
-                        if (fs.existsSync(authPath)) {
-                            try {
-                                fs.rmSync(authPath, { recursive: true, force: true });
-                            } catch (e) {
-                                console.error('Error clearing auth path:', e.message);
-                            }
-                        }
-                    }
-                } else if (connection === 'open') {
-                    this.status = 'CONNECTED';
-                    this.qrText = '';
-                    this.lastError = null;
-                    console.log('Client is ready (Baileys)!');
-                    emitLog({ type: 'success', message: 'WhatsApp Client is ready and connected!', timestamp: new Date().toISOString() });
-                    emitStatus(this.getStatus());
-                }
-            });
-        } catch (error) {
-            console.error('Failed to initialize Baileys client:', error);
-            this.status = 'DISCONNECTED';
-            this.initialized = false;
-            this.lastError = error.message;
-            emitStatus(this.getStatus());
+            }
+        } catch (err) {
+            if (this.status !== 'DISCONNECTED') {
+                this.status = 'DISCONNECTED';
+                this.qrText = '';
+                this.lastError = `Failed to contact Go Bridge: ${err.message}`;
+                
+                const { emitStatus } = require('./socket');
+                emitStatus(this.getStatus());
+            }
         }
     }
 
@@ -114,51 +63,36 @@ class WhatsAppClient {
         return {
             status: this.status,
             qrText: this.qrText,
-            lastError: this.lastError,
-            version: this.sock ? this.sock.version : null
+            lastError: this.lastError
         };
     }
 
     async reconnect() {
         try {
-            console.log('Reconnection requested...');
+            console.log('[Proxy] Requesting Go Bridge session reset...');
+            await axios.post(`${this.bridgeUrl}/reconnect`);
             this.status = 'DISCONNECTED';
-            this.initialized = false;
-            
-            if (this.sock) {
-                try {
-                    this.sock.end();
-                } catch (e) {
-                    console.error('Error ending socket:', e.message);
-                }
-            }
+            this.qrText = '';
+            this.lastError = null;
 
-            const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
-            const authPath = path.join(baseDir, 'wa_auth_persistent');
-            if (fs.existsSync(authPath)) {
-                try {
-                    fs.rmSync(authPath, { recursive: true, force: true });
-                } catch (e) {
-                    console.error('Error clearing auth directory:', e.message);
-                }
-            }
-
-            await this.init();
-        } catch (error) {
-            console.error('Error during reconnection:', error);
-            throw error;
+            const { emitStatus } = require('./socket');
+            emitStatus(this.getStatus());
+        } catch (err) {
+            console.error('[Proxy] Failed to request reconnect from Go Bridge:', err.message);
+            throw err;
         }
     }
 
     async sendTextMessage(to, text) {
-        if (this.status !== 'CONNECTED' || !this.sock) {
-            throw new Error('WhatsApp is not connected.');
+        try {
+            await axios.post(`${this.bridgeUrl}/send`, { to, text });
+            console.log(`[Proxy] Text message sent to ${to}`);
+            return true;
+        } catch (err) {
+            const errMsg = err.response?.data || err.message;
+            console.error(`[Proxy] Failed to send text message to ${to}:`, errMsg);
+            throw new Error(errMsg);
         }
-        
-        const formattedJid = this.formatJid(to);
-        await this.sock.sendMessage(formattedJid, { text });
-        console.log(`Text message sent to ${formattedJid}`);
-        return true;
     }
 
     /**
@@ -169,10 +103,6 @@ class WhatsAppClient {
      * @param {string} mediaType - 'image' | 'video'
      */
     async sendMedia(groupId, filePath, caption = '', mediaType = 'image') {
-        if (this.status !== 'CONNECTED' || !this.sock) {
-            throw new Error('WhatsApp is not connected.');
-        }
-
         // Resolve absolute path respecting DATA_DIR persistent storage if configured
         const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
         const absPath = path.isAbsolute(filePath)
@@ -183,27 +113,20 @@ class WhatsAppClient {
             throw new Error(`Media file not found: ${absPath}`);
         }
 
-        const formattedJid = this.formatJid(groupId);
-        const mimeType = mime.lookup(absPath);
-        
-        let message = {};
-        if (mediaType === 'video') {
-            message = { 
-                video: fs.readFileSync(absPath), 
-                caption, 
-                mimetype: mimeType 
-            };
-        } else {
-            message = { 
-                image: fs.readFileSync(absPath), 
-                caption, 
-                mimetype: mimeType 
-            };
+        try {
+            await axios.post(`${this.bridgeUrl}/send`, {
+                to: groupId,
+                text: caption,
+                mediaPath: absPath,
+                mediaType: mediaType
+            });
+            console.log(`[Proxy] Media (${mediaType}) sent to ${groupId}`);
+            return true;
+        } catch (err) {
+            const errMsg = err.response?.data || err.message;
+            console.error(`[Proxy] Failed to send media to ${groupId}:`, errMsg);
+            throw new Error(errMsg);
         }
-
-        await this.sock.sendMessage(formattedJid, message);
-        console.log(`Media (${mediaType}) sent to ${formattedJid}`);
-        return true;
     }
 
     // Legacy alias kept for compatibility
@@ -220,29 +143,11 @@ class WhatsAppClient {
 
     // Retrieve participating chats/groups
     async getChats() {
-        if (!this.sock || this.status !== 'CONNECTED') {
-            return [];
-        }
-        
         try {
-            // Fetch participating groups directly from WhatsApp Socket API
-            const groups = await this.sock.groupFetchAllParticipating();
-            return Object.values(groups).map(g => ({
-                id: g.id,
-                name: g.subject,
-                isGroup: true
-            }));
-        } catch (e) {
-            console.error('Error fetching participating groups:', e);
-            
-            // Fallback to store if store contains active chats
-            if (this.store && this.store.chats) {
-                return this.store.chats.all().map(c => ({
-                    id: c.id,
-                    name: c.name || c.id.split('@')[0],
-                    isGroup: c.id.endsWith('@g.us')
-                }));
-            }
+            const res = await axios.get(`${this.bridgeUrl}/groups`);
+            return res.data;
+        } catch (err) {
+            console.error('[Proxy] Failed to fetch groups from Go Bridge:', err.message);
             return [];
         }
     }
