@@ -114,7 +114,8 @@ class WhatsAppClient {
         return {
             status: this.status,
             qrText: this.qrText,
-            lastError: this.lastError
+            lastError: this.lastError,
+            version: this.sock ? this.sock.version : null
         };
     }
 
