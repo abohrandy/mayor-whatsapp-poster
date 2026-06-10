@@ -98,6 +98,8 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });
+            // Log specific error message to DB
+            await logActivity('announcement_error', `Failed to send to group ${groupId}: ${err.message}`);
         }
         // 1.5-second delay between sending to groups to avoid rate-limiting and timeouts
         await new Promise(resolve => setTimeout(resolve, 1500));
