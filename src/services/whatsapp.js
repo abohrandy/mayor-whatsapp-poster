@@ -63,19 +63,24 @@ class WhatsAppClient {
 
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+                    const errMessage = (lastDisconnect?.error)?.message || 'No error message';
                     const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                     
                     console.log(`Connection closed (status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
                     this.status = 'DISCONNECTED';
                     this.initialized = false;
                     emitStatus(this.getStatus());
+
+                    // Log the disconnection details to the activity log database
+                    const { logActivity } = require('../models/database');
+                    logActivity('connection_failed', `WhatsApp connection closed. Status Code: ${statusCode}, Error: ${errMessage}. Reconnecting: ${shouldReconnect}`).catch(console.error);
                     
                     if (shouldReconnect) {
-                        emitLog({ type: 'warning', message: 'Connection closed, reconnecting...', timestamp: new Date().toISOString() });
+                        emitLog({ type: 'warning', message: `Connection closed (status ${statusCode}), reconnecting...`, timestamp: new Date().toISOString() });
                         // Brief delay before reconnecting to prevent loops
                         setTimeout(() => this.init(), 5000);
                     } else {
-                        this.lastError = 'Logged out from WhatsApp session.';
+                        this.lastError = `Logged out from WhatsApp session (status: ${statusCode}).`;
                         emitLog({ type: 'error', message: 'WhatsApp Client logged out. Reconnection required.', timestamp: new Date().toISOString() });
                         
                         // Clear auth folder on logout
