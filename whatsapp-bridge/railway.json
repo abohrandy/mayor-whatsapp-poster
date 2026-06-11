@@ -1,0 +1,6 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "go mod tidy && go build -ldflags=\"-w -s\" -o out"
+  }
+}
