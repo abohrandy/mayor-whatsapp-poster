@@ -122,10 +122,12 @@ class WhatsAppClient {
         }
 
         try {
+            const mediaBase64 = fs.readFileSync(absPath, { encoding: 'base64' });
+
             await axios.post(`${this.bridgeUrl}/send`, {
                 to: groupId,
                 text: caption,
-                mediaPath: absPath,
+                mediaBase64: mediaBase64,
                 mediaType: mediaType
             });
             console.log(`[Proxy] Media (${mediaType}) sent to ${groupId}`);

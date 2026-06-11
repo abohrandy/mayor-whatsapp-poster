@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -294,10 +295,11 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 type SendRequest struct {
-	To        string `json:"to"`
-	Text      string `json:"text"`
-	MediaPath string `json:"mediaPath"`
-	MediaType string `json:"mediaType"` // "image" | "video"
+	To          string `json:"to"`
+	Text        string `json:"text"`
+	MediaPath   string `json:"mediaPath"`
+	MediaBase64 string `json:"mediaBase64"`
+	MediaType   string `json:"mediaType"` // "image" | "video"
 }
 
 func handleSend(w http.ResponseWriter, r *http.Request) {
@@ -340,8 +342,17 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
-	if req.MediaPath != "" {
-		// Send Media
+	if req.MediaBase64 != "" {
+		// Send Media from Base64
+		data, decodeErr := base64.StdEncoding.DecodeString(req.MediaBase64)
+		if decodeErr != nil {
+			log.Printf("[Bridge] Failed to decode base64: %v", decodeErr)
+			http.Error(w, fmt.Sprintf("Failed to decode base64: %v", decodeErr), http.StatusBadRequest)
+			return
+		}
+		err = sendMediaData(jid, data, req.Text, req.MediaType)
+	} else if req.MediaPath != "" {
+		// Send Media from file path
 		err = sendMedia(jid, req.MediaPath, req.Text, req.MediaType)
 	} else {
 		// Send Text
@@ -376,10 +387,15 @@ func sendMedia(jid types.JID, path, caption, mediaType string) error {
 		return fmt.Errorf("failed to read media file: %w", err)
 	}
 
+	return sendMediaData(jid, data, caption, mediaType)
+}
+
+func sendMediaData(jid types.JID, data []byte, caption, mediaType string) error {
 	mimeType := http.DetectContentType(data)
 
 	// Upload to WhatsApp server
 	var uploadResp whatsmeow.UploadResponse
+	var err error
 	if mediaType == "video" {
 		uploadResp, err = client.Upload(context.Background(), data, whatsmeow.MediaVideo)
 	} else {
