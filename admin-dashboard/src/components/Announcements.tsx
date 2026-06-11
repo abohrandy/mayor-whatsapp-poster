@@ -230,7 +230,17 @@ const Announcements = () => {
         fd.append('recurrence_days', String(form.recurrence_days));
         // Calculate next_post_at: today + recurrence_days at post_time
         const d = new Date();
-        const [h, m] = form.post_time.split(':').map(Number);
+        let h = 8, m = 0;
+        const timeMatch = (form.post_time || '08:00').match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+        if (timeMatch) {
+          h = parseInt(timeMatch[1], 10);
+          m = parseInt(timeMatch[2], 10);
+          const ampm = timeMatch[3];
+          if (ampm) {
+            if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
+            if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+          }
+        }
         d.setHours(h, m, 0, 0);
         if (d <= new Date()) d.setDate(d.getDate() + (form.recurrence_days || 1));
         fd.append('next_post_at', d.toISOString());
@@ -248,8 +258,9 @@ const Announcements = () => {
       }
       closeModal();
       fetchAnnouncements();
-    } catch (err) {
-      alert('Failed to save announcement. Please try again.');
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error || err.message || JSON.stringify(err);
+      alert('Failed to save announcement: ' + errMsg);
     } finally { setSubmitting(false); }
   };
 
@@ -272,7 +283,17 @@ const Announcements = () => {
       if (form.is_recurring) {
         fd.append('recurrence_days', String(form.recurrence_days));
         const d = new Date();
-        const [h, m] = form.post_time.split(':').map(Number);
+        let h = 8, m = 0;
+        const timeMatch = (form.post_time || '08:00').match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+        if (timeMatch) {
+          h = parseInt(timeMatch[1], 10);
+          m = parseInt(timeMatch[2], 10);
+          const ampm = timeMatch[3];
+          if (ampm) {
+            if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
+            if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+          }
+        }
         d.setHours(h, m, 0, 0);
         if (d <= new Date()) d.setDate(d.getDate() + (form.recurrence_days || 1));
         fd.append('next_post_at', d.toISOString());
@@ -297,8 +318,9 @@ const Announcements = () => {
       }
       closeModal();
       fetchAnnouncements();
-    } catch (err) {
-      alert('Failed to save and post announcement. Please try again.');
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error || err.message || JSON.stringify(err);
+      alert('Failed to save and post announcement: ' + errMsg);
     } finally { setSubmitting(false); }
   };
 
