@@ -76,7 +76,7 @@ func main() {
 	log.Printf("[Bridge] Using session database: %s", dbPath)
 
 	// Initialize database Container
-	container, err := sqlstore.New("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
+	container, err := sqlstore.New(context.Background(), "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
 	if err != nil {
 		log.Fatalf("[Bridge] Failed to init session DB: %v", err)
 	}
@@ -120,7 +120,7 @@ func startClient() {
 	setQR("")
 
 	// Get first device
-	deviceStore, err := dbContainer.GetFirstDevice()
+	deviceStore, err := dbContainer.GetFirstDevice(context.Background())
 	if err != nil {
 		setStatus("DISCONNECTED", fmt.Sprintf("Failed to get device from store: %v", err))
 		return
@@ -246,7 +246,7 @@ func handleReconnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reinitialize
-	container, err := sqlstore.New("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
+	container, err := sqlstore.New(context.Background(), "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to re-init DB: %v", err), http.StatusInternalServerError)
 		return
@@ -268,7 +268,7 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups, err := client.GetJoinedGroups()
+	groups, err := client.GetJoinedGroups(context.Background())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch groups: %v", err), http.StatusInternalServerError)
 		return
@@ -395,22 +395,22 @@ func sendMedia(jid types.JID, path, caption, mediaType string) error {
 		msg.VideoMessage = &waE2E.VideoMessage{
 			Caption:       proto.String(caption),
 			Mimetype:      proto.String(mimeType),
-			Url:           proto.String(uploadResp.URL),
+			URL:           proto.String(uploadResp.URL),
 			DirectPath:    proto.String(uploadResp.DirectPath),
 			MediaKey:      uploadResp.MediaKey,
-			FileEncSha256: uploadResp.FileEncSHA256,
-			FileSha256:    uploadResp.FileSHA256,
+			FileEncSHA256: uploadResp.FileEncSHA256,
+			FileSHA256:    uploadResp.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(data))),
 		}
 	} else {
 		msg.ImageMessage = &waE2E.ImageMessage{
 			Caption:       proto.String(caption),
 			Mimetype:      proto.String(mimeType),
-			Url:           proto.String(uploadResp.URL),
+			URL:           proto.String(uploadResp.URL),
 			DirectPath:    proto.String(uploadResp.DirectPath),
 			MediaKey:      uploadResp.MediaKey,
-			FileEncSha256: uploadResp.FileEncSHA256,
-			FileSha256:    uploadResp.FileSHA256,
+			FileEncSHA256: uploadResp.FileEncSHA256,
+			FileSHA256:    uploadResp.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(data))),
 		}
 	}
