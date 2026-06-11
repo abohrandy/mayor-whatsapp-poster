@@ -10,7 +10,15 @@ class WhatsAppClient {
         this.qrText = '';
         this.lastError = null;
         this.initialized = false;
-        this.bridgeUrl = process.env.WHATSAPP_BRIDGE_URL || 'http://localhost:8080';
+        
+        let url = process.env.WHATSAPP_BRIDGE_URL || 'http://localhost:8080';
+        // Clean up trailing colons/slashes
+        url = url.trim().replace(/:+$/, '').replace(/\/+$/, '');
+        // Ensure protocol is present
+        if (!/^https?:\/\//i.test(url)) {
+            url = `http://${url}`;
+        }
+        this.bridgeUrl = url;
     }
 
     async init() {
