@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X, Package } from 'lucide-react';
 import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import Announcements from './components/Announcements';
@@ -11,6 +11,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import Subscription from './components/Subscription';
 import UserManagement from './components/UserManagement';
+import PlanManagement from './components/PlanManagement';
 
 // Setup global axios headers interceptor
 axios.interceptors.request.use(config => {
@@ -100,6 +101,7 @@ function App() {
       case 'whatsapp': return <WhatsAppStatus />;
       case 'settings': return <Settings />;
       case 'users': return <UserManagement />;
+      case 'plans': return <PlanManagement />;
       default: return <Dashboard setActiveTab={setActiveTab} />;
     }
   };
@@ -115,6 +117,7 @@ function App() {
 
   if (user && user.is_admin) {
     navItems.push({ id: 'users', label: 'User Management', Icon: ShieldCheck });
+    navItems.push({ id: 'plans', label: 'Subscription Plans', Icon: Package });
   }
 
   const tabLabels: Record<string, string> = {
@@ -125,6 +128,7 @@ function App() {
     whatsapp: 'WhatsApp Status',
     settings: 'Settings',
     users: 'User Management',
+    plans: 'Subscription Plans',
   };
 
   // 1. Loading state

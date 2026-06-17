@@ -12,18 +12,39 @@ const paymentController = {
                 return res.status(500).json({ error: 'Paystack integration is not configured on the server. PAYSTACK_SECRET_KEY is missing.' });
             }
 
-            const email = req.user.email;
-            const callbackUrl = `${req.protocol}://${req.get('host')}/whatsapp`; // redirect to dashboard
+            const { plan_slug } = req.body;
+            const db = await getDb();
 
-            // Paystack Initialize Transaction API (for plans, it automatically registers subscription)
+            // Look up the plan to subscribe to
+            let plan;
+            if (plan_slug) {
+                plan = await db.get('SELECT * FROM subscription_plans WHERE slug = ? AND is_active = 1 AND is_trial = 0', [plan_slug]);
+            } else {
+                // Default to the first active non-trial plan
+                plan = await db.get('SELECT * FROM subscription_plans WHERE is_active = 1 AND is_trial = 0 ORDER BY price ASC LIMIT 1');
+            }
+
+            if (!plan) {
+                return res.status(400).json({ error: 'No valid subscription plan found.' });
+            }
+
+            const email = req.user.email;
+            const callbackUrl = `${req.protocol}://${req.get('host')}/whatsapp`;
+
             const paystackPayload = {
                 email,
-                amount: '500000', // e.g., 5,000 NGN (expressed in kobo: 5000 * 100)
-                callback_url: callbackUrl
+                amount: String(plan.price),
+                callback_url: callbackUrl,
+                metadata: {
+                    plan_slug: plan.slug,
+                    plan_name: plan.name
+                }
             };
 
-            if (PAYSTACK_PLAN_CODE) {
-                paystackPayload.plan = PAYSTACK_PLAN_CODE;
+            // Use plan-specific Paystack plan code if available, otherwise fall back to env var
+            const planCode = plan.paystack_plan_code || PAYSTACK_PLAN_CODE;
+            if (planCode) {
+                paystackPayload.plan = planCode;
             }
 
             console.log('[Paystack] Initializing payment transaction...', paystackPayload);
@@ -92,17 +113,19 @@ const paymentController = {
             switch (event.event) {
                 case 'subscription.create':
                 case 'charge.success':
-                    // Activate subscription and upgrade to premium tier
+                    // Activate subscription and upgrade to the dynamically determined plan tier
+                    const planSlug = event.data.metadata?.plan_slug || 'premium';
                     await db.run(
-                        `UPDATE users SET subscription_status = 'active', tier = 'premium', trial_ends_at = NULL, paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
+                        `UPDATE users SET subscription_status = 'active', tier = ?, trial_ends_at = NULL, paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
                         [
+                            planSlug,
                             event.data.customer.customer_code || null,
                             event.data.subscription_code || null,
                             user.id
                         ]
                     );
-                    await logActivity('subscription_activated', `Subscription upgraded to Premium via Paystack webhook`, user.id);
-                    console.log(`[Paystack] Upgraded & activated subscription for ${customerEmail}`);
+                    await logActivity('subscription_activated', `Subscription upgraded to ${planSlug} via Paystack webhook`, user.id);
+                    console.log(`[Paystack] Upgraded & activated subscription for ${customerEmail} to ${planSlug}`);
                     break;
 
                 case 'subscription.disable':

@@ -182,3 +182,69 @@
 :root.light .bg-red-500\/10 {
   background-color: rgba(239, 68, 68, 0.15) !important;
 }
+
+/* Table row dividers in light mode */
+:root.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+:root.light .divide-slate-700 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* Table header row backgrounds */
+:root.light .bg-slate-900\/10,
+:root.light .bg-slate-900\/20 {
+  background-color: #f8fafc !important;
+}
+
+/* Hover rows in tables */
+:root.light .hover\:bg-slate-900\/20:hover {
+  background-color: #f1f5f9 !important;
+}
+
+:root.light .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Font mono text – keep readable in light */
+:root.light .font-mono {
+  color: #1e293b !important;
+}
+
+/* Ensure strong white text is dark in light mode */
+:root.light strong.text-white {
+  color: #0f172a !important;
+}
+
+/* Modal overlay backdrop */
+:root.light .bg-black\/60 {
+  background-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Emerald, yellow, indigo badge tints (preserve readable bg/text) */
+:root.light .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+:root.light .bg-yellow-500\/10 {
+  background-color: rgba(234, 179, 8, 0.12) !important;
+}
+
+/* Primary / indigo tinted backgrounds */
+:root.light .bg-primary\/10 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Scrollbar styling for light mode */
+:root.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+:root.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+:root.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

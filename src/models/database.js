@@ -43,6 +43,16 @@ async function initDb() {
         }
     }
 
+    const hasPlanId = usersColumns.some(col => col.name === 'plan_id');
+    if (!hasPlanId) {
+        try {
+            await db.exec("ALTER TABLE users ADD COLUMN plan_id INTEGER DEFAULT NULL");
+            console.log('Migrated users table: added plan_id column.');
+        } catch (err) {
+            console.error('Failed to add plan_id column to users:', err);
+        }
+    }
+
     // Post History table
     await db.exec(`
         CREATE TABLE IF NOT EXISTS post_history (
@@ -52,6 +62,41 @@ async function initDb() {
             posted_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Subscription Plans table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS subscription_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            price INTEGER DEFAULT 0,
+            duration_days INTEGER DEFAULT 30,
+            max_groups INTEGER DEFAULT 3,
+            max_sessions INTEGER DEFAULT 1,
+            spam_interval_hours INTEGER DEFAULT 12,
+            paystack_plan_code TEXT DEFAULT NULL,
+            is_trial INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Seed default subscription plans if none exist
+    const planCount = await db.get('SELECT COUNT(*) as count FROM subscription_plans');
+    if (planCount.count === 0) {
+        await db.run(
+            `INSERT INTO subscription_plans (name, slug, price, duration_days, max_groups, max_sessions, spam_interval_hours, is_trial, is_active)
+             VALUES ('Free Trial', 'trial', 0, 14, 3, 1, 12, 1, 1)`
+        );
+        await db.run(
+            `INSERT INTO subscription_plans (name, slug, price, duration_days, max_groups, max_sessions, spam_interval_hours, is_trial, is_active)
+             VALUES ('Premium Plan', 'premium', 500000, 30, 25, 999, 6, 0, 1)`
+        );
+        console.log('Seeded default subscription plans.');
+    }
+
+    // Ensure existing database migrations/updates are applied to default plans
+    await db.run("UPDATE subscription_plans SET max_groups = 25 WHERE slug = 'premium' AND max_groups > 25");
 
     // WhatsApp Sessions table
     await db.exec(`

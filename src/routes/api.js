@@ -6,6 +6,7 @@ const profileController = require('../controllers/profileController');
 const authController = require('../controllers/authController');
 const paymentController = require('../controllers/paymentController');
 const adminController = require('../controllers/adminController');
+const planController = require('../controllers/planController');
 const { requireAuth, requireSubscription, requireAdmin } = require('../middleware/auth');
 const waClient = require('../services/whatsapp');
 
@@ -18,6 +19,9 @@ router.get('/auth/me', requireAuth, authController.me);
 router.post('/payments/initialize', requireAuth, paymentController.initialize);
 router.post('/payments/start-trial', requireAuth, paymentController.startTrial);
 router.post('/payments/webhook', paymentController.webhook); // Webhook verification inside controller
+
+// ── Subscription Plans (Public) ──────────────────────────────────────────────
+router.get('/plans', planController.listActivePlans);
 
 // ── Announcements (Protected by Auth & Active Subscription) ──────────────────
 router.get('/announcements', requireAuth, requireSubscription, announcementController.list);
@@ -57,9 +61,11 @@ router.post('/whatsapp/session/new', requireAuth, requireSubscription, async (re
             [req.user.id]
         );
 
-        if (req.user.tier === 'trial' && currentSessions.count >= 1) {
+        const userPlan = await db.get('SELECT max_sessions, name FROM subscription_plans WHERE slug = ?', [req.user.tier]);
+        const maxSessions = userPlan?.max_sessions || 1;
+        if (currentSessions.count >= maxSessions) {
             return res.status(400).json({
-                error: 'Your Free Trial tier only allows linking 1 WhatsApp number/session. Please upgrade to a Premium Plan to link multiple WhatsApp numbers.'
+                error: `Your ${userPlan?.name || 'current'} plan only allows linking ${maxSessions} WhatsApp number(s). Please upgrade to a higher plan to link more.`
             });
         }
 
@@ -235,5 +241,12 @@ router.delete('/profiles/:id', requireAuth, requireSubscription, profileControll
 // ── SaaS User Management (Admin Only) ─────────────────────────────────────────
 router.get('/admin/users', requireAuth, requireAdmin, adminController.listUsers);
 router.post('/admin/users/:id/subscription', requireAuth, requireAdmin, adminController.toggleUserSubscription);
+router.post('/admin/users/:id/tier', requireAuth, requireAdmin, adminController.updateUserTier);
+
+// ── Subscription Plan Management (Admin Only) ────────────────────────────────
+router.get('/admin/plans', requireAuth, requireAdmin, planController.listAllPlans);
+router.post('/admin/plans', requireAuth, requireAdmin, planController.createPlan);
+router.put('/admin/plans/:id', requireAuth, requireAdmin, planController.updatePlan);
+router.delete('/admin/plans/:id', requireAuth, requireAdmin, planController.deletePlan);
 
 module.exports = router;

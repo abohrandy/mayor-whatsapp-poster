@@ -21,7 +21,7 @@ async function checkSpamLimits(userId, caption) {
     try {
         const db = await getDb();
         const user = await db.get(
-            'SELECT tier, trial_ends_at, subscription_status FROM users WHERE id = ?',
+            'SELECT email, tier, trial_ends_at, subscription_status FROM users WHERE id = ?',
             [userId]
         );
 
@@ -29,11 +29,15 @@ async function checkSpamLimits(userId, caption) {
             return { allowed: false, message: 'User account not found' };
         }
 
-        // Determine rate-limiting threshold
-        // Trial tier: 12 hours
-        // Premium tier: 6 hours
-        const isPremium = user.tier === 'premium' && user.subscription_status === 'active';
-        const limitHours = isPremium ? 6 : 12;
+        // Exempt Super Admin from anti-spam rate limiting
+        const adminEmail = process.env.ADMIN_EMAIL;
+        if (adminEmail && user.email === adminEmail) {
+            return { allowed: true };
+        }
+
+        // Determine rate-limiting threshold from subscription plan
+        const userPlan = await db.get('SELECT spam_interval_hours FROM subscription_plans WHERE slug = ?', [user.tier]);
+        const limitHours = userPlan?.spam_interval_hours || 12;
 
         const contentHash = getHash(caption);
         const cutoffTime = new Date();

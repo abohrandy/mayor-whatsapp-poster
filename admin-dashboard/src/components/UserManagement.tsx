@@ -47,6 +47,18 @@ const UserManagement = () => {
     }
   };
 
+  const handleToggleTier = async (userId: number, newTier: 'trial' | 'premium') => {
+    setActionId(userId);
+    try {
+      await axios.post(`/api/admin/users/${userId}/tier`, { tier: newTier });
+      await fetchUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update user subscription tier.');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   // Filter users based on search
   const filteredUsers = users.filter(u =>
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -176,19 +188,26 @@ const UserManagement = () => {
                           hour: '2-digit', minute: '2-digit'
                         })}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right space-y-2">
                         <button
                           onClick={() => handleToggleSubscription(user.id)}
                           disabled={actionId === user.id}
-                          className={`px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${isActive ? 'bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white' : 'bg-emerald-500/10 hover:bg-emerald-600 text-emerald-400 hover:text-white'}`}
+                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${isActive ? 'bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white' : 'bg-emerald-500/10 hover:bg-emerald-600 text-emerald-400 hover:text-white'}`}
                         >
                           {actionId === user.id ? (
-                            <RefreshCw size={12} className="animate-spin" />
+                            <RefreshCw size={12} className="animate-spin inline" />
                           ) : isActive ? (
                             'Revoke Access'
                           ) : (
                             'Grant Access'
                           )}
+                        </button>
+                        <button
+                          onClick={() => handleToggleTier(user.id, user.tier === 'premium' ? 'trial' : 'premium')}
+                          disabled={actionId === user.id}
+                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'premium' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
+                        >
+                          {user.tier === 'premium' ? 'Downgrade to Trial' : 'Upgrade to Premium'}
                         </button>
                       </td>
                     </tr>

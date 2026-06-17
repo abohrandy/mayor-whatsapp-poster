@@ -65,8 +65,14 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
-            const isPremium = req.user.tier === 'premium' && req.user.subscription_status === 'active';
-            const maxGroups = isPremium ? 50 : 3;
+            let maxGroups = 3;
+            if (isAdmin) {
+                maxGroups = 999999;
+            } else {
+                const db2 = await initDb();
+                const userPlan = await db2.get('SELECT max_groups FROM subscription_plans WHERE slug = ?', [req.user.tier]);
+                maxGroups = userPlan?.max_groups || 3;
+            }
             if (groups.length > maxGroups) {
                 return res.status(400).json({
                     error: `Your subscription tier (${req.user.tier}) only allows sending to up to ${maxGroups} groups at a time. Please upgrade or reduce the number of selected groups.`
@@ -157,8 +163,16 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
-            const isPremium = req.user.tier === 'premium' && req.user.subscription_status === 'active';
-            const maxGroups = isPremium ? 50 : 3;
+            const adminEmail = process.env.ADMIN_EMAIL;
+            const isAdmin = adminEmail && req.user.email === adminEmail;
+            let maxGroups = 3;
+            if (isAdmin) {
+                maxGroups = 999999;
+            } else {
+                const db2 = await initDb();
+                const userPlan = await db2.get('SELECT max_groups FROM subscription_plans WHERE slug = ?', [req.user.tier]);
+                maxGroups = userPlan?.max_groups || 3;
+            }
             if (groups.length > maxGroups) {
                 return res.status(400).json({
                     error: `Your subscription tier (${req.user.tier}) only allows sending to up to ${maxGroups} groups at a time. Please upgrade or reduce the number of selected groups.`

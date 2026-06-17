@@ -58,6 +58,49 @@ const adminController = {
             console.error('[Admin toggleUserSubscription] Error:', err);
             res.status(500).json({ error: 'Failed to override user subscription' });
         }
+    },
+
+    async updateUserTier(req, res) {
+        try {
+            const { id } = req.params;
+            const { tier } = req.body; // 'trial' or 'premium'
+            if (!['trial', 'premium'].includes(tier)) {
+                return res.status(400).json({ error: 'Invalid tier selection' });
+            }
+
+            const db = await getDb();
+            const user = await db.get('SELECT email FROM users WHERE id = ?', [id]);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            // If switching to premium, reset trial_ends_at to NULL, otherwise if trial, set it to now + 14 days
+            let trialEndsAt = null;
+            if (tier === 'trial') {
+                const ends = new Date();
+                ends.setDate(ends.getDate() + 14);
+                trialEndsAt = ends.toISOString();
+            }
+
+            await db.run(
+                'UPDATE users SET tier = ?, trial_ends_at = ? WHERE id = ?',
+                [tier, trialEndsAt, id]
+            );
+
+            const logMsg = `Admin manually set tier for user ${user.email} to: ${tier.toUpperCase()}`;
+            console.log(`[Admin] ${logMsg}`);
+            await logActivity('admin_override', logMsg, req.user.id);
+
+            res.json({
+                message: 'User tier updated successfully',
+                userId: id,
+                tier,
+                trial_ends_at: trialEndsAt
+            });
+        } catch (err) {
+            console.error('[Admin updateUserTier] Error:', err);
+            res.status(500).json({ error: 'Failed to update user tier' });
+        }
     }
 };
 
