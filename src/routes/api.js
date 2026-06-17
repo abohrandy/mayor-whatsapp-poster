@@ -206,7 +206,19 @@ router.get('/logs', requireAuth, async (req, res) => {
     try {
         const { initDb } = require('../models/database');
         const db = await initDb();
-        const logs = await db.all('SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 100', [req.user.id]);
+        
+        const adminEmail = process.env.ADMIN_EMAIL;
+        let logs;
+        if (adminEmail && req.user.email === adminEmail) {
+            logs = await db.all(`
+                SELECT activity_logs.*, users.email as user_email 
+                FROM activity_logs 
+                LEFT JOIN users ON activity_logs.user_id = users.id 
+                ORDER BY activity_logs.created_at DESC LIMIT 200
+            `);
+        } else {
+            logs = await db.all('SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 100', [req.user.id]);
+        }
         res.json(logs);
     } catch (error) {
         console.error('Error fetching logs:', error);

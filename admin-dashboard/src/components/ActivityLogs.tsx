@@ -85,7 +85,10 @@ const ActivityLogs = () => {
                                                 {new Date(log.created_at).toLocaleString()}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">{log.action_type.replace(/_/g, ' ')}</p>
+                                        <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">
+                                            {log.action_type.replace(/_/g, ' ')}
+                                            {log.user_email && ` • BY ${log.user_email}`}
+                                        </p>
                                     </div>
                                 </div>
                             );

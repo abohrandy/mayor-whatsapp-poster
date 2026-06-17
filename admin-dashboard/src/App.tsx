@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X } from 'lucide-react';
 import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import Announcements from './components/Announcements';
@@ -24,6 +24,7 @@ axios.interceptors.request.use(config => {
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openNewAnnouncementModal, setOpenNewAnnouncementModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Theme states
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -156,7 +157,8 @@ function App() {
 
   // 3. Billing subscription lock / Trial Expired lock
   const isTrialExpired = user.tier === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) < new Date();
-  if (user.subscription_status !== 'active' || isTrialExpired) {
+  const isAdmin = user.is_admin;
+  if (!isAdmin && (user.subscription_status !== 'active' || isTrialExpired)) {
     return (
       <Subscription
         user={user}
@@ -168,9 +170,19 @@ function App() {
 
   // 4. Authenticated main workspace
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background relative">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-10 md:hidden backdrop-blur-xs transition-opacity duration-300"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 glass-sidebar flex flex-col fixed h-full z-10">
+      <aside className={`w-64 glass-sidebar flex flex-col fixed h-full z-20 transition-transform duration-300 ${
+        isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
         <div className="p-6 border-b border-slate-700/50">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent">
             WhatsApp Poster
@@ -183,7 +195,10 @@ function App() {
             <button
               key={id}
               id={`nav-${id}`}
-              onClick={() => setActiveTab(id)}
+              onClick={() => {
+                setActiveTab(id);
+                setIsSidebarOpen(false); // Close sidebar on mobile link select
+              }}
               className={`w-full nav-link ${activeTab === id ? 'active' : ''}`}
             >
               <Icon size={20} />
@@ -200,7 +215,9 @@ function App() {
             </div>
             <div className="truncate flex-1">
               <p className="text-xs font-semibold text-white truncate">{user.email}</p>
-              {user.tier === 'trial' ? (
+              {user.is_admin ? (
+                <p className="text-[10px] text-green-400 font-bold uppercase tracking-wider">Super Admin</p>
+              ) : user.tier === 'trial' ? (
                 <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider">
                   Trial: {(() => {
                     if (!user.trial_ends_at) return '0 days';
@@ -223,10 +240,19 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-64 p-8">
-        <header className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-bold text-white">{tabLabels[activeTab]}</h2>
-          <div className="flex items-center gap-4">
+      <main className="flex-1 ml-0 md:ml-64 p-4 md:p-8 transition-all min-w-0">
+        <header className="flex justify-between items-center mb-8 gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(prev => !prev)}
+              className="p-2 text-slate-400 hover:text-white glass-card md:hidden cursor-pointer"
+              title="Toggle Menu"
+            >
+              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <h2 className="text-xl md:text-2xl font-bold text-white truncate">{tabLabels[activeTab]}</h2>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <button
               id="btn-theme-toggle"
               onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
@@ -241,7 +267,7 @@ function App() {
             <div className="h-4 w-px bg-slate-700"></div>
             <button id="btn-admin" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 glass-card">
               <User size={18} />
-              SaaS Panel
+              <span className="hidden sm:inline">SaaS Panel</span>
             </button>
           </div>
         </header>

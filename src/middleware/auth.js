@@ -41,6 +41,12 @@ function requireSubscription(req, res, next) {
         return res.status(401).json({ error: 'Authentication required' });
     }
 
+    // Bypass subscription requirements for admin
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail && req.user.email === adminEmail) {
+        return next();
+    }
+
     if (req.user.subscription_status !== 'active') {
         return res.status(403).json({ error: 'Active subscription required. Please subscribe to proceed.' });
     }
