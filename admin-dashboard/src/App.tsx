@@ -9,11 +9,25 @@ import PostingProfiles from './components/PostingProfiles';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [openNewAnnouncementModal, setOpenNewAnnouncementModal] = useState(false);
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard setActiveTab={setActiveTab} />;
-      case 'announcements': return <Announcements />;
+      case 'dashboard': return (
+        <Dashboard
+          setActiveTab={setActiveTab}
+          triggerNewAnnouncement={() => {
+            setActiveTab('announcements');
+            setOpenNewAnnouncementModal(true);
+          }}
+        />
+      );
+      case 'announcements': return (
+        <Announcements
+          openNewModalOnMount={openNewAnnouncementModal}
+          setOpenNewModalOnMount={setOpenNewAnnouncementModal}
+        />
+      );
       case 'profiles': return <PostingProfiles />;
       case 'activity': return <ActivityLogs />;
       case 'whatsapp': return <WhatsAppStatus />;

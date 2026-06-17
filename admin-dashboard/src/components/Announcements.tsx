@@ -70,7 +70,7 @@ const RibbonStrip = ({ files, ribbonIndex }: { files: MediaFile[]; ribbonIndex: 
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-const Announcements = () => {
+const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNewModalOnMount?: boolean; setOpenNewModalOnMount?: (val: boolean) => void }) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -125,6 +125,13 @@ const Announcements = () => {
   };
 
   useEffect(() => { fetchAnnouncements(); }, []);
+
+  useEffect(() => {
+    if (openNewModalOnMount && setOpenNewModalOnMount) {
+      openModal();
+      setOpenNewModalOnMount(false);
+    }
+  }, [openNewModalOnMount]);
 
   const fetchAnnouncements = async () => {
     try {

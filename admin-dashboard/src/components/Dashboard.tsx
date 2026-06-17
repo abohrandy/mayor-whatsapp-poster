@@ -18,7 +18,7 @@ const StatCard = ({ title, value, icon: Icon, color, secondary }: any) => (
     </div>
 );
 
-const Dashboard = ({ setActiveTab }: any) => {
+const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
     const [stats, setStats] = useState({
         total: 0,
         activeRecurring: 0,
@@ -86,6 +86,20 @@ const Dashboard = ({ setActiveTab }: any) => {
 
     return (
         <div className="space-y-8">
+            {/* Quick Actions Panel */}
+            <div className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h3 className="text-lg font-bold text-white">Quick Actions</h3>
+                    <p className="text-sm text-slate-400">Launch a new message campaign or manage current configurations</p>
+                </div>
+                <button
+                    onClick={triggerNewAnnouncement}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all text-sm cursor-pointer"
+                >
+                    + New Announcement
+                </button>
+            </div>
+
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <StatCard
