@@ -92,17 +92,17 @@ const paymentController = {
             switch (event.event) {
                 case 'subscription.create':
                 case 'charge.success':
-                    // Activate subscription
+                    // Activate subscription and upgrade to premium tier
                     await db.run(
-                        `UPDATE users SET subscription_status = 'active', paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
+                        `UPDATE users SET subscription_status = 'active', tier = 'premium', trial_ends_at = NULL, paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
                         [
                             event.data.customer.customer_code || null,
                             event.data.subscription_code || null,
                             user.id
                         ]
                     );
-                    await logActivity('subscription_activated', `Subscription activated via Paystack webhook`, user.id);
-                    console.log(`[Paystack] Activated subscription for ${customerEmail}`);
+                    await logActivity('subscription_activated', `Subscription upgraded to Premium via Paystack webhook`, user.id);
+                    console.log(`[Paystack] Upgraded & activated subscription for ${customerEmail}`);
                     break;
 
                 case 'subscription.disable':
@@ -123,6 +123,39 @@ const paymentController = {
         } catch (err) {
             console.error('[Paystack Webhook] Error processing webhook:', err);
             res.status(500).json({ error: 'Webhook handler error' });
+        }
+    },
+
+    async startTrial(req, res) {
+        try {
+            const db = await getDb();
+            const user = await db.get('SELECT tier, trial_ends_at FROM users WHERE id = ?', [req.user.id]);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (user.trial_ends_at) {
+                return res.status(400).json({ error: 'You have already used or started your Free Trial.' });
+            }
+
+            const trialEndsAt = new Date();
+            trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
+            await db.run(
+                "UPDATE users SET tier = 'trial', subscription_status = 'active', trial_ends_at = ? WHERE id = ?",
+                [trialEndsAt.toISOString(), req.user.id]
+            );
+
+            await logActivity('trial_started', `Started 14-day free trial`, req.user.id);
+
+            res.json({
+                message: 'Trial started successfully',
+                tier: 'trial',
+                trial_ends_at: trialEndsAt.toISOString()
+            });
+        } catch (err) {
+            console.error('[Start Trial] Error:', err);
+            res.status(500).json({ error: 'Failed to start trial' });
         }
     }
 };

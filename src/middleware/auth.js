@@ -20,7 +20,7 @@ async function requireAuth(req, res, next) {
 
         const db = await getDb();
         const user = await db.get(
-            'SELECT id, email, subscription_status, paystack_customer_code, paystack_subscription_code FROM users WHERE id = ?',
+            'SELECT id, email, subscription_status, paystack_customer_code, paystack_subscription_code, tier, trial_ends_at FROM users WHERE id = ?',
             [decoded.userId]
         );
 
@@ -43,6 +43,18 @@ function requireSubscription(req, res, next) {
 
     if (req.user.subscription_status !== 'active') {
         return res.status(403).json({ error: 'Active subscription required. Please subscribe to proceed.' });
+    }
+
+    // Check if trial has expired
+    if (req.user.tier === 'trial') {
+        if (req.user.trial_ends_at) {
+            const endsAt = new Date(req.user.trial_ends_at);
+            if (endsAt < new Date()) {
+                return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a premium plan to proceed.' });
+            }
+        } else {
+            return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a premium plan to proceed.' });
+        }
     }
 
     next();

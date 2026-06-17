@@ -24,7 +24,32 @@ async function initDb() {
             subscription_status TEXT DEFAULT 'inactive', -- active, inactive, past_due
             paystack_customer_code TEXT DEFAULT NULL,
             paystack_subscription_code TEXT DEFAULT NULL,
+            tier TEXT DEFAULT 'trial',                  -- trial, premium
+            trial_ends_at DATETIME DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Migrate existing users table if columns don't exist
+    const usersColumns = await db.all('PRAGMA table_info(users)');
+    const hasTier = usersColumns.some(col => col.name === 'tier');
+    if (!hasTier) {
+        try {
+            await db.exec("ALTER TABLE users ADD COLUMN tier TEXT DEFAULT 'trial'");
+            await db.exec("ALTER TABLE users ADD COLUMN trial_ends_at DATETIME DEFAULT NULL");
+            console.log('Migrated users table: added tier and trial_ends_at columns.');
+        } catch (err) {
+            console.error('Failed to add tier/trial_ends_at columns to users:', err);
+        }
+    }
+
+    // Post History table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS post_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            content_hash TEXT NOT NULL,
+            posted_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
 

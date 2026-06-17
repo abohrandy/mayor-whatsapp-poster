@@ -18,10 +18,13 @@ const authController = {
                 return res.status(400).json({ error: 'Email address is already registered' });
             }
 
+            const trialEndsAt = new Date();
+            trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
             const passwordHash = await bcrypt.hash(password, 10);
             const result = await db.run(
-                'INSERT INTO users (email, password_hash, subscription_status) VALUES (?, ?, ?)',
-                [email, passwordHash, 'inactive'] // initially inactive
+                'INSERT INTO users (email, password_hash, subscription_status, tier, trial_ends_at) VALUES (?, ?, ?, ?, ?)',
+                [email, passwordHash, 'active', 'trial', trialEndsAt.toISOString()]
             );
 
             const userId = result.lastID;
@@ -35,7 +38,9 @@ const authController = {
                 user: {
                     id: userId,
                     email,
-                    subscription_status: 'inactive',
+                    subscription_status: 'active',
+                    tier: 'trial',
+                    trial_ends_at: trialEndsAt.toISOString(),
                     is_admin: email === (process.env.ADMIN_EMAIL || '')
                 }
             });
@@ -78,6 +83,8 @@ const authController = {
                     id: user.id,
                     email: user.email,
                     subscription_status: user.subscription_status,
+                    tier: user.tier,
+                    trial_ends_at: user.trial_ends_at,
                     is_admin: user.email === (process.env.ADMIN_EMAIL || '')
                 }
             });
@@ -94,6 +101,8 @@ const authController = {
                 id: req.user.id,
                 email: req.user.email,
                 subscription_status: req.user.subscription_status,
+                tier: req.user.tier,
+                trial_ends_at: req.user.trial_ends_at,
                 is_admin: req.user.email === (process.env.ADMIN_EMAIL || '')
             }
         });

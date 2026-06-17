@@ -65,6 +65,14 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
+            const isPremium = req.user.tier === 'premium' && req.user.subscription_status === 'active';
+            const maxGroups = isPremium ? 50 : 3;
+            if (groups.length > maxGroups) {
+                return res.status(400).json({
+                    error: `Your subscription tier (${req.user.tier}) only allows sending to up to ${maxGroups} groups at a time. Please upgrade or reduce the number of selected groups.`
+                });
+            }
+
             // Calculate next_post_at
             let nextPostAt = null;
             if (next_post_at) {
@@ -148,6 +156,14 @@ const announcementController = {
 
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
+
+            const isPremium = req.user.tier === 'premium' && req.user.subscription_status === 'active';
+            const maxGroups = isPremium ? 50 : 3;
+            if (groups.length > maxGroups) {
+                return res.status(400).json({
+                    error: `Your subscription tier (${req.user.tier}) only allows sending to up to ${maxGroups} groups at a time. Please upgrade or reduce the number of selected groups.`
+                });
+            }
 
             let variations = [];
             try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
@@ -277,6 +293,22 @@ const announcementController = {
             const db = await initDb();
             const ann = await db.get('SELECT * FROM announcements WHERE id = ? AND user_id = ?', [id, req.user.id]);
             if (!ann) return res.status(404).json({ error: 'Announcement not found.' });
+
+            // Determine caption (caption variations index)
+            let captionVariations = [];
+            try { captionVariations = JSON.parse(ann.caption_variations || '[]'); } catch { captionVariations = []; }
+
+            let caption = ann.caption || ann.title;
+            if (captionVariations.length > 0) {
+                const captionIdx = ann.caption_index || 0;
+                caption = captionVariations[captionIdx % captionVariations.length];
+            }
+
+            const { checkSpamLimits } = require('../services/antiSpam');
+            const spamCheck = await checkSpamLimits(req.user.id, caption);
+            if (!spamCheck.allowed) {
+                return res.status(400).json({ error: spamCheck.message });
+            }
 
             const { sendAnnouncement } = require('../services/scheduler');
             setImmediate(() => sendAnnouncement(ann));

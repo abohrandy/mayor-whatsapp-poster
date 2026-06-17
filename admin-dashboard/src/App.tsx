@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon } from 'lucide-react';
 import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import Announcements from './components/Announcements';
@@ -24,6 +24,21 @@ axios.interceptors.request.use(config => {
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openNewAnnouncementModal, setOpenNewAnnouncementModal] = useState(false);
+
+  // Theme states
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Authentication & Subscription states
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -139,8 +154,9 @@ function App() {
     );
   }
 
-  // 3. Billing subscription lock
-  if (user.subscription_status !== 'active') {
+  // 3. Billing subscription lock / Trial Expired lock
+  const isTrialExpired = user.tier === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) < new Date();
+  if (user.subscription_status !== 'active' || isTrialExpired) {
     return (
       <Subscription
         user={user}
@@ -184,7 +200,17 @@ function App() {
             </div>
             <div className="truncate flex-1">
               <p className="text-xs font-semibold text-white truncate">{user.email}</p>
-              <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Premium Member</p>
+              {user.tier === 'trial' ? (
+                <p className="text-[10px] text-yellow-400 font-bold uppercase tracking-wider">
+                  Trial: {(() => {
+                    if (!user.trial_ends_at) return '0 days';
+                    const diff = new Date(user.trial_ends_at).getTime() - new Date().getTime();
+                    return `${Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))} days left`;
+                  })()}
+                </p>
+              ) : (
+                <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Premium Member</p>
+              )}
             </div>
           </div>
           <button
@@ -201,6 +227,14 @@ function App() {
         <header className="flex justify-between items-center mb-8">
           <h2 className="text-2xl font-bold text-white">{tabLabels[activeTab]}</h2>
           <div className="flex items-center gap-4">
+            <button
+              id="btn-theme-toggle"
+              onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+              className="p-2 text-slate-400 hover:text-white glass-card cursor-pointer"
+              title="Toggle Light/Dark Mode"
+            >
+              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
             <button id="btn-notifications" className="p-2 text-slate-400 hover:text-white glass-card">
               <Bell size={20} />
             </button>

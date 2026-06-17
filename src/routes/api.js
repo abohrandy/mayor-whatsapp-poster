@@ -16,6 +16,7 @@ router.get('/auth/me', requireAuth, authController.me);
 
 // ── Paystack Payments ────────────────────────────────────────────────────────
 router.post('/payments/initialize', requireAuth, paymentController.initialize);
+router.post('/payments/start-trial', requireAuth, paymentController.startTrial);
 router.post('/payments/webhook', paymentController.webhook); // Webhook verification inside controller
 
 // ── Announcements (Protected by Auth & Active Subscription) ──────────────────
@@ -50,9 +51,20 @@ router.get('/whatsapp/status', requireAuth, requireSubscription, async (req, res
 
 router.post('/whatsapp/session/new', requireAuth, requireSubscription, async (req, res) => {
     try {
+        const db = await require('../models/database').getDb();
+        const currentSessions = await db.get(
+            'SELECT COUNT(*) as count FROM whatsapp_sessions WHERE user_id = ?',
+            [req.user.id]
+        );
+
+        if (req.user.tier === 'trial' && currentSessions.count >= 1) {
+            return res.status(400).json({
+                error: 'Your Free Trial tier only allows linking 1 WhatsApp number/session. Please upgrade to a Premium Plan to link multiple WhatsApp numbers.'
+            });
+        }
+
         const result = await waClient.createSession();
         // Link session to this user in database
-        const db = await require('../models/database').getDb();
         if (waClient.sessions && waClient.sessions.length > 0) {
             // Find the session that was just created (it starts as AUTH_REQUIRED or temp ID)
             const tempSess = waClient.sessions.find(s => s.status === 'AUTH_REQUIRED' && !s.jid);

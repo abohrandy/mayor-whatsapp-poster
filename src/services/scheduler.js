@@ -98,6 +98,62 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         caption = captionVariations[captionIdx % captionVariations.length];
     }
 
+    // Check anti-spam limits
+    const { checkSpamLimits } = require('./antiSpam');
+    const spamCheck = await checkSpamLimits(ann.user_id, caption);
+    if (!spamCheck.allowed) {
+        const errMsg = `[Anti-Spam] Blocked announcement "${ann.title}": ${spamCheck.message}`;
+        console.warn(errMsg);
+        emitLog({ type: 'error', message: errMsg, timestamp: new Date().toISOString() });
+        await logActivity('announcement_error', errMsg, ann.user_id);
+        
+        // If it's a scheduled recurring post, advance it to avoid getting stuck, or mark inactive if one-time
+        if (advanceRibbon) {
+            if (ann.is_recurring) {
+                const nextRibbonIdx = mediaFiles.length > 1 ? (ribbonIdx + 1) % mediaFiles.length : 0;
+                let nextCaptionIdx = 0;
+                if (captionVariations.length > 1) {
+                    const captionIdx = ann.caption_index || 0;
+                    nextCaptionIdx = (captionIdx + 1) % captionVariations.length;
+                }
+                
+                let daysOfWeek = [];
+                try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
+                const nextPostAt = new Date();
+                if (ann.post_time) {
+                    const [h, m] = ann.post_time.split(':').map(Number);
+                    nextPostAt.setHours(h, m, 0, 0);
+                }
+                if (daysOfWeek.length > 0) {
+                    let found = false;
+                    for (let i = 1; i <= 7; i++) {
+                        const tempDate = new Date(nextPostAt);
+                        tempDate.setDate(tempDate.getDate() + i);
+                        if (daysOfWeek.includes(tempDate.getDay())) {
+                            nextPostAt.setDate(nextPostAt.getDate() + i);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) nextPostAt.setDate(nextPostAt.getDate() + 1);
+                } else {
+                    const recurrenceDays = ann.recurrence_days || 1;
+                    nextPostAt.setDate(nextPostAt.getDate() + recurrenceDays);
+                }
+                await db.run(
+                    'UPDATE announcements SET ribbon_index = ?, caption_index = ?, next_post_at = ? WHERE id = ?',
+                    [nextRibbonIdx, nextCaptionIdx, nextPostAt.toISOString(), ann.id]
+                );
+            } else {
+                await db.run(
+                    `UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`,
+                    [ann.id]
+                );
+            }
+        }
+        return;
+    }
+
     // Fetch send delay from settings
     let sendDelayMs = 5000;
     try {
@@ -146,7 +202,12 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     const logMsg = `Announcement "${ann.title}" sent to ${succeeded}/${targetGroups.length} group(s)${failed > 0 ? ` (${failed} failed)` : ''}.`;
     console.log('[Scheduler]', logMsg);
     emitLog({ type: failed > 0 ? 'warning' : 'success', message: logMsg, timestamp: new Date().toISOString() });
-    await logActivity('announcement_posted', logMsg);
+    await logActivity('announcement_posted', logMsg, ann.user_id);
+
+    if (succeeded > 0) {
+        const { logPostContent } = require('./antiSpam');
+        await logPostContent(ann.user_id, caption);
+    }
 
     if (advanceRibbon) {
         if (ann.is_recurring) {

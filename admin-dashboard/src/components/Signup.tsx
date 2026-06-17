@@ -123,6 +123,15 @@ const Signup: React.FC<SignupProps> = ({ onSignupSuccess, onNavigateToLogin }) =
             </button>
           </p>
         </div>
+
+        <div className="border-t border-slate-700/50 pt-4 text-center">
+          <p className="text-[10px] text-red-400 font-bold uppercase tracking-wider mb-1">
+            ⚠️ Anti-Spam & Legal Disclaimer
+          </p>
+          <p className="text-[10px] text-slate-500 leading-normal">
+            We strictly enforce a zero-tolerance policy against spamming, bulk message abuse, and any illegal activities. Violations will result in immediate and permanent account ban without exception.
+          </p>
+        </div>
       </div>
     </div>
   );
