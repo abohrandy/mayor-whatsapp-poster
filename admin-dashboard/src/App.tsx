@@ -12,6 +12,7 @@ import Signup from './components/Signup';
 import Subscription from './components/Subscription';
 import UserManagement from './components/UserManagement';
 import PlanManagement from './components/PlanManagement';
+import { useNotifications } from './hooks/useNotifications';
 
 // Setup global axios headers interceptor
 axios.interceptors.request.use(config => {
@@ -23,6 +24,9 @@ axios.interceptors.request.use(config => {
 });
 
 function App() {
+  // Setup local and push notifications listener for mobile app
+  useNotifications();
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openNewAnnouncementModal, setOpenNewAnnouncementModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WhatsApp Group Poster</string>
+    <string name="title_activity_main">WhatsApp Group Poster</string>
+    <string name="package_name">com.whatsappposter.app</string>
+    <string name="custom_url_scheme">com.whatsappposter.app</string>
+</resources>
