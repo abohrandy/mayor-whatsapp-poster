@@ -82,3 +82,57 @@
     border-right: 2px solid var(--color-primary);
   }
 }
+
+/* Light mode overrides for Tailwind utilities */
+:root.light .text-white,
+:root.light h2.text-white,
+:root.light h3.text-white,
+:root.light h4.text-white,
+:root.light .text-slate-100,
+:root.light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+:root.light .text-slate-300,
+:root.light .text-slate-400 {
+  color: #334155 !important;
+}
+
+:root.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+:root.light .bg-slate-900,
+:root.light .bg-slate-900\/50,
+:root.light .bg-slate-955,
+:root.light .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
+
+:root.light .bg-slate-800,
+:root.light .bg-slate-800\/20,
+:root.light .bg-slate-800\/80,
+:root.light .bg-slate-800\/50 {
+  background-color: #e2e8f0 !important;
+}
+
+:root.light .border-slate-700,
+:root.light .border-slate-800,
+:root.light .border-slate-700\/30,
+:root.light .border-slate-700\/50 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Ensure inputs are legible in light mode */
+:root.light input,
+:root.light textarea,
+:root.light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+  color: #94a3b8 !important;
+}

@@ -185,7 +185,7 @@ function App() {
       }`}>
         <div className="p-6 border-b border-slate-700/50">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent">
-            WhatsApp Poster
+            WhatsApp Group Poster
           </h1>
           <p className="text-xs text-slate-500 mt-1">SaaS Multi-Account Poster</p>
         </div>
