@@ -99,7 +99,7 @@
 }
 
 :root.light .text-slate-500 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 
 :root.light .bg-slate-900,
@@ -135,4 +135,50 @@
 :root.light input::placeholder,
 :root.light textarea::placeholder {
   color: #94a3b8 !important;
+}
+
+/* Sidebar Specific Light Mode Enhancements */
+:root.light .glass-sidebar {
+  background-color: #ffffff !important;
+  border-right: 1px solid #e2e8f0 !important;
+}
+
+:root.light .glass-sidebar h1 {
+  background: none !important;
+  color: var(--color-primary-dark) !important;
+}
+
+:root.light .glass-sidebar p {
+  color: #64748b !important;
+}
+
+:root.light .nav-link {
+  color: #475569 !important;
+}
+
+:root.light .nav-link:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+}
+
+:root.light .nav-link.active {
+  color: var(--color-primary-dark) !important;
+  background-color: color-mix(in srgb, var(--color-primary) 12%, transparent) !important;
+  border-right: 3px solid var(--color-primary) !important;
+}
+
+/* Card Specific Light Mode Enhancements */
+:root.light .glass-card {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Adjust log activity block, login, signup */
+:root.light .bg-indigo-500\/10 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+:root.light .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
 }
