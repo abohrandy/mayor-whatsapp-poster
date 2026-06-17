@@ -4,9 +4,19 @@ const adminController = {
     async listUsers(req, res) {
         try {
             const db = await getDb();
-            const users = await db.all(
-                'SELECT id, email, subscription_status, created_at FROM users ORDER BY created_at DESC'
-            );
+            const users = await db.all(`
+                SELECT 
+                    u.id, 
+                    u.email, 
+                    u.subscription_status, 
+                    u.tier, 
+                    u.trial_ends_at, 
+                    u.created_at,
+                    (SELECT COUNT(*) FROM whatsapp_sessions WHERE user_id = u.id) as sessions_count,
+                    (SELECT COUNT(*) FROM announcements WHERE user_id = u.id) as announcements_count
+                FROM users u
+                ORDER BY u.created_at DESC
+            `);
             res.json({ users });
         } catch (err) {
             console.error('[Admin listUsers] Error:', err);

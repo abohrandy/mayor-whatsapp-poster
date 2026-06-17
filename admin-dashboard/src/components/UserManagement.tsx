@@ -6,6 +6,10 @@ interface SaaSUser {
   id: number;
   email: string;
   subscription_status: 'active' | 'inactive';
+  tier: 'trial' | 'premium';
+  trial_ends_at: string | null;
+  sessions_count: number;
+  announcements_count: number;
   created_at: string;
 }
 
@@ -130,8 +134,9 @@ const UserManagement = () => {
                 <tr className="border-b border-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
                   <th className="px-6 py-4">User ID</th>
                   <th className="px-6 py-4">Email Address</th>
+                  <th className="px-6 py-4">Plan Details</th>
+                  <th className="px-6 py-4">Usage Metrics</th>
                   <th className="px-6 py-4">Signup Date</th>
-                  <th className="px-6 py-4">Subscription Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -142,16 +147,34 @@ const UserManagement = () => {
                     <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
                       <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
                       <td className="px-6 py-4 font-semibold text-white">{user.email}</td>
+                      <td className="px-6 py-4 space-y-1">
+                        <div className="flex gap-1.5 flex-wrap">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                            {user.subscription_status}
+                          </span>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'premium' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
+                            {user.tier}
+                          </span>
+                        </div>
+                        {user.tier === 'trial' && user.trial_ends_at && (
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            Ends: {new Date(user.trial_ends_at).toLocaleDateString('en-GB')}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 space-y-1">
+                        <p className="text-slate-400">
+                          Sessions Linked: <strong className="text-white font-mono">{user.sessions_count || 0}</strong>
+                        </p>
+                        <p className="text-slate-400">
+                          Announcements: <strong className="text-white font-mono">{user.announcements_count || 0}</strong>
+                        </p>
+                      </td>
                       <td className="px-6 py-4 text-slate-400">
                         {new Date(user.created_at).toLocaleDateString('en-GB', {
                           day: '2-digit', month: 'short', year: 'numeric',
                           hour: '2-digit', minute: '2-digit'
                         })}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                          {user.subscription_status}
-                        </span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
