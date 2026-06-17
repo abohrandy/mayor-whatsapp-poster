@@ -65,6 +65,8 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
+            const adminEmail = process.env.ADMIN_EMAIL;
+            const isAdmin = adminEmail && req.user.email === adminEmail;
             let maxGroups = 3;
             if (isAdmin) {
                 maxGroups = 999999;
