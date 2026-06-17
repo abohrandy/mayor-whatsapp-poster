@@ -56,18 +56,18 @@ const DAYS_OF_WEEK = [
 const RibbonStrip = ({ files, ribbonIndex }: { files: MediaFile[]; ribbonIndex: number }) => {
   if (files.length === 0) {
     return (
-      <div className="w-full h-24 rounded-lg bg-slate-800/60 flex items-center justify-center text-slate-600">
+      <div className="w-full h-32 rounded-lg bg-slate-800/60 flex items-center justify-center text-slate-600">
         <Film size={28} />
       </div>
     );
   }
   const current = files[ribbonIndex % files.length];
   return (
-    <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-800">
+    <div className="relative w-full h-32 rounded-lg overflow-hidden bg-slate-950/40">
       {current.type === 'image' ? (
-        <img src={`/${current.path}`} className="w-full h-full object-cover" alt="" />
+        <img src={`/${current.path}`} className="w-full h-full object-contain" alt="" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-slate-700">
+        <div className="w-full h-full flex items-center justify-center bg-slate-700/50">
           <Video size={32} className="text-indigo-400" />
         </div>
       )}
