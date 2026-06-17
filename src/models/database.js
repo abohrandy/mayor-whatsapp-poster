@@ -26,6 +26,7 @@ async function initDb() {
             media_files TEXT NOT NULL DEFAULT '[]',  -- JSON array of {path, type}
             is_recurring INTEGER NOT NULL DEFAULT 0,  -- 0=one-time, 1=recurring
             recurrence_days INTEGER DEFAULT NULL,      -- "every N days"
+            recurrence_days_of_week TEXT NOT NULL DEFAULT '[]', -- JSON array of day indices (0=Sunday, 1=Monday, etc)
             post_time TEXT DEFAULT '08:00',           -- HH:MM (24h)
             target_groups TEXT NOT NULL DEFAULT '[]', -- JSON array of group IDs
             ribbon_index INTEGER NOT NULL DEFAULT 0,  -- which media file fires next
@@ -45,6 +46,16 @@ async function initDb() {
             console.log('Migrated announcements table: added caption_variations and caption_index columns.');
         } catch (err) {
             console.error('Failed to add caption_variations/caption_index to announcements:', err);
+        }
+    }
+
+    const hasDaysOfWeek = annColumns.some(col => col.name === 'recurrence_days_of_week');
+    if (!hasDaysOfWeek) {
+        try {
+            await db.exec("ALTER TABLE announcements ADD COLUMN recurrence_days_of_week TEXT NOT NULL DEFAULT '[]'");
+            console.log('Migrated announcements table: added recurrence_days_of_week column.');
+        } catch (err) {
+            console.error('Failed to add recurrence_days_of_week to announcements:', err);
         }
     }
 

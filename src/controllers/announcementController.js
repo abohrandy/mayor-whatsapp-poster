@@ -38,7 +38,7 @@ const announcementController = {
         try {
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
-                post_time, target_groups, next_post_at
+                recurrence_days_of_week, post_time, target_groups, next_post_at
             } = req.body;
 
             if (!title) return res.status(400).json({ error: 'Title is required.' });
@@ -78,11 +78,15 @@ const announcementController = {
             let variations = [];
             try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
 
+            // Parse recurrence_days_of_week
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
+
             const db = await initDb();
             const result = await db.run(
                 `INSERT INTO announcements
-                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, post_time, target_groups, ribbon_index, status, next_post_at)
-                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 'active', ?)`,
+                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, post_time, target_groups, ribbon_index, status, next_post_at)
+                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 0, 'active', ?)`,
                 [
                     title,
                     caption || '',
@@ -90,6 +94,7 @@ const announcementController = {
                     JSON.stringify(mediaFiles),
                     parseInt(is_recurring) || 0,
                     recurrence_days ? parseInt(recurrence_days) : null,
+                    JSON.stringify(daysOfWeek),
                     post_time || '08:00',
                     JSON.stringify(groups),
                     nextPostAt || null
@@ -110,7 +115,7 @@ const announcementController = {
             const { id } = req.params;
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
-                post_time, target_groups, next_post_at, keep_media
+                recurrence_days_of_week, post_time, target_groups, next_post_at, keep_media
             } = req.body;
 
             const db = await initDb();
@@ -145,10 +150,13 @@ const announcementController = {
             let variations = [];
             try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
 
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
+
             await db.run(
                 `UPDATE announcements
                  SET title = ?, caption = ?, caption_variations = ?, media_files = ?, is_recurring = ?,
-                     recurrence_days = ?, post_time = ?, target_groups = ?, next_post_at = ?
+                     recurrence_days = ?, recurrence_days_of_week = ?, post_time = ?, target_groups = ?, next_post_at = ?
                  WHERE id = ?`,
                 [
                     title,
@@ -157,6 +165,7 @@ const announcementController = {
                     JSON.stringify(mediaFiles),
                     parseInt(is_recurring) || 0,
                     recurrence_days ? parseInt(recurrence_days) : null,
+                    JSON.stringify(daysOfWeek),
                     post_time || '08:00',
                     JSON.stringify(groups),
                     next_post_at || null,

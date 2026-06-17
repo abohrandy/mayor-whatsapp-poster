@@ -144,14 +144,35 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
                 nextCaptionIdx = (captionIdx + 1) % captionVariations.length;
             }
 
-            // Recalculate next_post_at: now + recurrence_days
-            const recurrenceDays = ann.recurrence_days || 1;
+            // Recalculate next_post_at: specific days of week OR now + recurrence_days
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
+
             const nextPostAt = new Date();
-            nextPostAt.setDate(nextPostAt.getDate() + recurrenceDays);
             // Keep the same time-of-day
             if (ann.post_time) {
                 const [h, m] = ann.post_time.split(':').map(Number);
                 nextPostAt.setHours(h, m, 0, 0);
+            }
+
+            if (daysOfWeek.length > 0) {
+                // Find next day of week matching selected days (starting tomorrow)
+                let found = false;
+                for (let i = 1; i <= 7; i++) {
+                    const tempDate = new Date(nextPostAt);
+                    tempDate.setDate(tempDate.getDate() + i);
+                    if (daysOfWeek.includes(tempDate.getDay())) {
+                        nextPostAt.setDate(nextPostAt.getDate() + i);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    nextPostAt.setDate(nextPostAt.getDate() + 1);
+                }
+            } else {
+                const recurrenceDays = ann.recurrence_days || 1;
+                nextPostAt.setDate(nextPostAt.getDate() + recurrenceDays);
             }
 
             await db.run(

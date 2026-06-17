@@ -20,6 +20,7 @@ interface Announcement {
   media_files: string; // JSON
   is_recurring: number;
   recurrence_days: number | null;
+  recurrence_days_of_week: string; // JSON
   post_time: string;
   target_groups: string; // JSON
   ribbon_index: number;
@@ -40,6 +41,16 @@ const formatNextPost = (dt: string | null) => {
     hour: '2-digit', minute: '2-digit'
   });
 };
+
+const DAYS_OF_WEEK = [
+  { id: 1, label: 'Mon' },
+  { id: 2, label: 'Tue' },
+  { id: 3, label: 'Wed' },
+  { id: 4, label: 'Thu' },
+  { id: 5, label: 'Fri' },
+  { id: 6, label: 'Sat' },
+  { id: 0, label: 'Sun' },
+];
 
 // ─── Media Ribbon Strip (card preview) ───────────────────────────────────────
 const RibbonStrip = ({ files, ribbonIndex }: { files: MediaFile[]; ribbonIndex: number }) => {
@@ -89,6 +100,8 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     caption_variations: [] as string[],
     is_recurring: false,
     recurrence_days: 7,
+    recurrence_days_of_week: [] as number[],
+    start_date: new Date().toISOString().slice(0, 10),
     post_time: '08:00',
     next_post_at: '',
     target_groups: [] as string[],
@@ -168,6 +181,8 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
         caption_variations: parseJSON<string[]>(ann.caption_variations || '[]', []),
         is_recurring: !!ann.is_recurring,
         recurrence_days: ann.recurrence_days || 7,
+        recurrence_days_of_week: parseJSON<number[]>(ann.recurrence_days_of_week || '[]', []),
+        start_date: ann.next_post_at ? ann.next_post_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
         post_time: ann.post_time || '08:00',
         next_post_at: ann.next_post_at ? ann.next_post_at.slice(0, 16) : '',
         target_groups: parseJSON<string[]>(ann.target_groups, []),
@@ -220,6 +235,18 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     }));
   };
 
+  const toggleDayOfWeek = (dayId: number) => {
+    setForm(prev => {
+      const days = prev.recurrence_days_of_week || [];
+      return {
+        ...prev,
+        recurrence_days_of_week: days.includes(dayId)
+          ? days.filter(d => d !== dayId)
+          : [...days, dayId].sort()
+      };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.target_groups.length === 0) {
@@ -239,9 +266,12 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('keep_media', '1'); // keep existing when editing
 
       if (form.is_recurring) {
-        fd.append('recurrence_days', String(form.recurrence_days));
-        // Calculate next_post_at: today + recurrence_days at post_time
-        const d = new Date();
+        const hasDays = form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0;
+        fd.append('recurrence_days', hasDays ? '' : String(form.recurrence_days));
+        fd.append('recurrence_days_of_week', JSON.stringify(form.recurrence_days_of_week || []));
+
+        // Calculate next_post_at: start_date (or today) + post_time
+        let d = form.start_date ? new Date(form.start_date) : new Date();
         let h = 8, m = 0;
         const timeMatch = (form.post_time || '08:00').match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
         if (timeMatch) {
@@ -254,10 +284,28 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
           }
         }
         d.setHours(h, m, 0, 0);
-        if (d <= new Date()) d.setDate(d.getDate() + (form.recurrence_days || 1));
+
+        if (hasDays) {
+          // Find next closest matching day starting from 'd' (can be today if in future)
+          for (let i = 0; i < 14; i++) {
+            const checkDate = new Date(d);
+            checkDate.setDate(checkDate.getDate() + i);
+            if (form.recurrence_days_of_week.includes(checkDate.getDay())) {
+              if (checkDate > new Date()) {
+                d = checkDate;
+                break;
+              }
+            }
+          }
+        } else {
+          if (d <= new Date()) {
+            d.setDate(d.getDate() + (form.recurrence_days || 1));
+          }
+        }
         fd.append('next_post_at', d.toISOString());
       } else {
         fd.append('recurrence_days', '');
+        fd.append('recurrence_days_of_week', '[]');
         fd.append('next_post_at', form.next_post_at ? new Date(form.next_post_at).toISOString() : '');
       }
 
@@ -294,8 +342,11 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('keep_media', '1');
 
       if (form.is_recurring) {
-        fd.append('recurrence_days', String(form.recurrence_days));
-        const d = new Date();
+        const hasDays = form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0;
+        fd.append('recurrence_days', hasDays ? '' : String(form.recurrence_days));
+        fd.append('recurrence_days_of_week', JSON.stringify(form.recurrence_days_of_week || []));
+
+        let d = form.start_date ? new Date(form.start_date) : new Date();
         let h = 8, m = 0;
         const timeMatch = (form.post_time || '08:00').match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
         if (timeMatch) {
@@ -308,10 +359,27 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
           }
         }
         d.setHours(h, m, 0, 0);
-        if (d <= new Date()) d.setDate(d.getDate() + (form.recurrence_days || 1));
+
+        if (hasDays) {
+          for (let i = 0; i < 14; i++) {
+            const checkDate = new Date(d);
+            checkDate.setDate(checkDate.getDate() + i);
+            if (form.recurrence_days_of_week.includes(checkDate.getDay())) {
+              if (checkDate > new Date()) {
+                d = checkDate;
+                break;
+              }
+            }
+          }
+        } else {
+          if (d <= new Date()) {
+            d.setDate(d.getDate() + (form.recurrence_days || 1));
+          }
+        }
         fd.append('next_post_at', d.toISOString());
       } else {
         fd.append('recurrence_days', '');
+        fd.append('recurrence_days_of_week', '[]');
         fd.append('next_post_at', form.next_post_at ? new Date(form.next_post_at).toISOString() : '');
       }
 
@@ -694,28 +762,103 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   </div>
                 )}
 
-                {/* Recurring: every N days + time */}
+                {/* Recurring: Options */}
                 {form.is_recurring && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-slate-400">Every N days</label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-sm">Every</span>
-                        <input type="number" min={1} max={365}
-                          className="w-20 p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white text-center"
-                          value={form.recurrence_days}
-                          onChange={e => setForm({ ...form, recurrence_days: parseInt(e.target.value) || 1 })}
-                        />
-                        <span className="text-slate-400 text-sm">days</span>
-                      </div>
+                  <div className="space-y-4 bg-slate-900/30 p-4 border border-slate-800 rounded-xl">
+                    <div className="flex gap-2 p-1 bg-slate-800/80 rounded-lg border border-slate-700/50">
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [] }))}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          !(form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0)
+                            ? 'bg-primary text-white'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Repeat by Interval
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [1] }))}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0
+                            ? 'bg-primary text-white'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Repeat by Days of Week
+                      </button>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-slate-400">Time of day</label>
-                      <input type="time"
-                        className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white"
-                        value={form.post_time}
-                        onChange={e => setForm({ ...form, post_time: e.target.value })}
-                      />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Left side: recurrence rule */}
+                      <div>
+                        {form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0 ? (
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-slate-400">Select Days</label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {DAYS_OF_WEEK.map(day => {
+                                const active = form.recurrence_days_of_week.includes(day.id);
+                                return (
+                                  <button
+                                    key={day.id}
+                                    type="button"
+                                    onClick={() => toggleDayOfWeek(day.id)}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                      active
+                                        ? 'bg-indigo-600 border-indigo-500 text-white shadow shadow-indigo-600/30'
+                                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
+                                    }`}
+                                  >
+                                    {day.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-slate-400">Every N days</label>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-400 text-sm">Every</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={365}
+                                className="w-20 p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white text-center"
+                                value={form.recurrence_days}
+                                onChange={e => setForm({ ...form, recurrence_days: parseInt(e.target.value) || 1 })}
+                              />
+                              <span className="text-slate-400 text-sm">days</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right side: Time of day */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-slate-400">Time of day</label>
+                        <input
+                          type="time"
+                          className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white"
+                          value={form.post_time}
+                          onChange={e => setForm({ ...form, post_time: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Starting Date */}
+                      <div className="col-span-2 space-y-2">
+                        <label className="text-xs font-medium text-slate-400">Starting Date</label>
+                        <input
+                          type="date"
+                          className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white"
+                          value={form.start_date || new Date().toISOString().slice(0, 10)}
+                          onChange={e => setForm({ ...form, start_date: e.target.value })}
+                        />
+                        <p className="text-[10px] text-slate-500">
+                          The schedule will start running on or after this date.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
