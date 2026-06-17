@@ -174,7 +174,7 @@ const announcementController = {
             );
 
             emitStats({ action: 'update' });
-            await logActivity('announcement_updated', `Updated announcement ID ${id}: "${title}"`);
+            await logActivity('announcement_updated', `Updated announcement: "${title}"`);
             res.json({ message: 'Announcement updated successfully.' });
         } catch (error) {
             console.error('Error updating announcement:', error);
@@ -197,7 +197,7 @@ const announcementController = {
             const { id } = req.params;
             const db = await initDb();
 
-            const ann = await db.get('SELECT media_files FROM announcements WHERE id = ?', [id]);
+            const ann = await db.get('SELECT title, media_files FROM announcements WHERE id = ?', [id]);
             if (ann) {
                 // Delete uploaded files
                 const files = JSON.parse(ann.media_files || '[]');
@@ -212,7 +212,7 @@ const announcementController = {
 
             await db.run('DELETE FROM announcements WHERE id = ?', [id]);
             emitStats({ action: 'delete' });
-            await logActivity('announcement_deleted', `Deleted announcement ID ${id}`);
+            await logActivity('announcement_deleted', `Deleted announcement: "${ann?.title || `ID ${id}`}"`);
             res.json({ message: 'Announcement deleted.' });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error.' });

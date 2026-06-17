@@ -109,16 +109,32 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         console.error('[Scheduler] Failed to get send_delay_seconds settings:', err);
     }
 
+    // Fetch group details to map JID to Name
+    let groupMap = {};
+    try {
+        const chats = await waClient.getChats();
+        if (Array.isArray(chats)) {
+            chats.forEach(chat => {
+                if (chat.id) {
+                    groupMap[chat.id] = chat.name;
+                }
+            });
+        }
+    } catch (err) {
+        console.error('[Scheduler] Failed to fetch group chats for naming map:', err);
+    }
+
     // Send to ALL target groups sequentially with a delay to prevent timeouts/congestion
     const sendResults = [];
     for (const groupId of targetGroups) {
+        const groupName = groupMap[groupId] || groupId;
         try {
-            await sendToGroupWithRetry(groupId, mediaEntry, caption);
+            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2);
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });
             // Log specific error message to DB
-            await logActivity('announcement_error', `Failed to send to group ${groupId}: ${err.message}`);
+            await logActivity('announcement_error', `Failed to send to group "${groupName}" (${groupId}): ${err.message}`);
         }
         // Configurable delay between sending to groups to avoid rate-limiting and timeouts
         await new Promise(resolve => setTimeout(resolve, sendDelayMs));
@@ -192,9 +208,10 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
 /**
  * Send to group with retry support and exponential backoff on rate limiting (error 420).
  */
-async function sendToGroupWithRetry(groupId, mediaEntry, caption, maxRetries = 3) {
+async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2) {
     let attempt = 0;
     let delay = 3000; // start with 3 seconds retry delay on error
+    const groupName = groupMap[groupId] || groupId;
     while (attempt < maxRetries) {
         try {
             await sendToGroup(groupId, mediaEntry, caption);
@@ -205,13 +222,13 @@ async function sendToGroupWithRetry(groupId, mediaEntry, caption, maxRetries = 3
             
             if (isRateLimit && attempt < maxRetries) {
                 const waitSec = Math.round(delay / 1000);
-                console.warn(`[Scheduler] Rate limited (420) sending to group ${groupId}. Attempt ${attempt}/${maxRetries}. Retrying in ${waitSec}s...`);
-                await logActivity('announcement_error', `Rate limited (420) sending to group ${groupId}. Retrying in ${waitSec}s... (Attempt ${attempt}/${maxRetries})`);
+                console.warn(`[Scheduler] Rate limited (420) sending to group "${groupName}" (${groupId}). Attempt ${attempt}/${maxRetries}. Retrying in ${waitSec}s...`);
+                await logActivity('announcement_error', `Rate limited (420) sending to group "${groupName}" (${groupId}). Retrying in ${waitSec}s... (Attempt ${attempt}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 delay *= 2.5; // increase retry delay exponentially
             } else {
                 if (attempt < maxRetries) {
-                    console.warn(`[Scheduler] Error sending to group ${groupId}. Attempt ${attempt}/${maxRetries}. Retrying in 2s... Error: ${err.message}`);
+                    console.warn(`[Scheduler] Error sending to group "${groupName}" (${groupId}). Attempt ${attempt}/${maxRetries}. Retrying in 2s... Error: ${err.message}`);
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 } else {
                     throw err; // throw last error if max retries exceeded
