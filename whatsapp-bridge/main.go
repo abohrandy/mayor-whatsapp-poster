@@ -11,13 +11,16 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -25,41 +28,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type ClientSession struct {
+	ID        string           `json:"id"`        // JID string or temp ID
+	JID       *types.JID       `json:"jid"`       // actual WhatsApp JID if authenticated
+	Client    *whatsmeow.Client `json:"-"`         // Whatsmeow client instance
+	Status    string           `json:"status"`    // CONNECTED, AUTH_REQUIRED, DISCONNECTED
+	QRText    string           `json:"qrText"`    // current QR code string
+	LastError string           `json:"lastError"` // last connection or session error
+	mu        sync.Mutex
+}
+
 var (
-	client      *whatsmeow.Client
+	sessions    map[string]*ClientSession = make(map[string]*ClientSession)
+	sessionsMu  sync.RWMutex
 	dbContainer *sqlstore.Container
-	qrText      string
-	qrLock      sync.Mutex
-	status      string = "DISCONNECTED"
-	lastError   string
-	statusLock  sync.Mutex
 )
-
-func setStatus(newStatus string, err string) {
-	statusLock.Lock()
-	defer statusLock.Unlock()
-	status = newStatus
-	lastError = err
-	log.Printf("[Bridge] Status changed to: %s (Error: %s)", newStatus, err)
-}
-
-func getStatus() (string, string) {
-	statusLock.Lock()
-	defer statusLock.Unlock()
-	return status, lastError
-}
-
-func setQR(qr string) {
-	qrLock.Lock()
-	defer qrLock.Unlock()
-	qrText = qr
-}
-
-func getQR() string {
-	qrLock.Lock()
-	defer qrLock.Unlock()
-	return qrText
-}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -73,7 +56,7 @@ func main() {
 	}
 	dbPath := filepath.Join(dataDir, "whatsmeow_auth.db")
 
-	log.Printf("[Bridge] Starting Whatsmeow HTTP Bridge on port %s...", port)
+	log.Printf("[Bridge] Starting Multi-Session Whatsmeow HTTP Bridge on port %s...", port)
 	log.Printf("[Bridge] Using session database: %s", dbPath)
 
 	// Initialize database Container
@@ -83,16 +66,25 @@ func main() {
 	}
 	dbContainer = container
 
-	// Start WhatsApp Client Connection
-	go startClient()
+	// Load existing sessions from database
+	devices, err := dbContainer.GetAllDevices()
+	if err != nil {
+		log.Printf("[Bridge] Warning: Failed to retrieve stored sessions: %v", err)
+	} else {
+		log.Printf("[Bridge] Found %d saved WhatsApp session(s). Connecting...", len(devices))
+		for _, dev := range devices {
+			go startClient(dev)
+		}
+	}
 
 	// HTTP Routing
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", handleStatus)
-	mux.HandleFunc("/qr", handleQR)
-	mux.HandleFunc("/reconnect", handleReconnect)
+	mux.HandleFunc("/session/new", handleNewSession)
+	mux.HandleFunc("/session/delete", handleDeleteSession)
 	mux.HandleFunc("/send", handleSend)
 	mux.HandleFunc("/groups", handleGroups)
+	mux.HandleFunc("/join", handleJoinGroup)
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -105,9 +97,17 @@ func main() {
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c
 		log.Println("[Bridge] Shutting down bridge...")
-		if client != nil {
-			client.Disconnect()
+		
+		sessionsMu.Lock()
+		for id, sess := range sessions {
+			if sess.Client != nil {
+				log.Printf("[Bridge] Disconnecting session: %s", id)
+				sess.Client.Disconnect()
+			}
 		}
+		sessionsMu.Unlock()
+		
+		_ = dbContainer.Close()
 		_ = server.Shutdown(context.Background())
 	}()
 
@@ -116,160 +116,241 @@ func main() {
 	}
 }
 
-func startClient() {
-	setStatus("DISCONNECTED", "")
-	setQR("")
+// ── Session Connection Handler ───────────────────────────────────────────────
 
-	// Get first device
-	deviceStore, err := dbContainer.GetFirstDevice(context.Background())
-	if err != nil {
-		setStatus("DISCONNECTED", fmt.Sprintf("Failed to get device from store: %v", err))
-		return
-	}
-
+func startClient(deviceStore *store.Device) {
 	clientLog := waLog.Stdout("Client", "WARN", true)
-	if deviceStore == nil {
-		// Create new device if not exists
-		deviceStore = dbContainer.NewDevice()
-		log.Println("[Bridge] No existing session found. Awaiting login/QR scan...")
-	} else {
-		log.Println("[Bridge] Existing session found. Authenticating...")
+	c := whatsmeow.NewClient(deviceStore, clientLog)
+
+	sess := &ClientSession{
+		Status: "DISCONNECTED",
 	}
 
-	c := whatsmeow.NewClient(deviceStore, clientLog)
-	client = c
+	// Determine session ID
+	var id string
+	if deviceStore.ID != nil {
+		id = deviceStore.ID.String()
+		sess.ID = id
+		sess.JID = deviceStore.ID
+	} else {
+		id = fmt.Sprintf("temp_%d", time.Now().UnixNano())
+		sess.ID = id
+	}
 
-	// Set handlers
-	c.AddEventHandler(eventHandler)
+	sessionsMu.Lock()
+	sessions[id] = sess
+	sessionsMu.Unlock()
+
+	sess.Client = c
+
+	// Handle events
+	c.AddEventHandler(func(rawEvt interface{}) {
+		switch evt := rawEvt.(type) {
+		case *events.Connected:
+			sess.mu.Lock()
+			sess.Status = "CONNECTED"
+			sess.LastError = ""
+			sess.QRText = ""
+			// If session was temporary, migrate key in map to JID JID.String()
+			if !strings.Contains(sess.ID, "@") && c.Store.ID != nil {
+				oldID := sess.ID
+				sess.ID = c.Store.ID.String()
+				sess.JID = c.Store.ID
+				
+				sessionsMu.Lock()
+				delete(sessions, oldID)
+				sessions[sess.ID] = sess
+				sessionsMu.Unlock()
+				log.Printf("[Bridge] Session promoted: %s -> %s", oldID, sess.ID)
+			}
+			sess.mu.Unlock()
+		case *events.Disconnected:
+			sess.mu.Lock()
+			sess.Status = "DISCONNECTED"
+			sess.LastError = "Disconnected from WhatsApp server"
+			sess.mu.Unlock()
+		case *events.LoggedOut:
+			sess.mu.Lock()
+			sess.Status = "DISCONNECTED"
+			sess.LastError = "Logged out from session"
+			sess.QRText = ""
+			sess.mu.Unlock()
+			log.Printf("[Bridge] Device logged out: %s", sess.ID)
+		}
+	})
 
 	if c.Store.ID == nil {
-		// No ID means we need to log in via QR
+		// New device require QR code
 		qrChan, err := c.GetQRChannel(context.Background())
 		if err != nil {
-			setStatus("DISCONNECTED", fmt.Sprintf("Failed to get QR channel: %v", err))
+			sess.mu.Lock()
+			sess.LastError = fmt.Sprintf("Failed to get QR channel: %v", err)
+			sess.mu.Unlock()
 			return
 		}
 		err = c.Connect()
 		if err != nil {
-			setStatus("DISCONNECTED", fmt.Sprintf("Failed to connect: %v", err))
+			sess.mu.Lock()
+			sess.Status = "DISCONNECTED"
+			sess.LastError = fmt.Sprintf("Failed to connect: %v", err)
+			sess.mu.Unlock()
 			return
 		}
-		setStatus("AUTH_REQUIRED", "")
+		
+		sess.mu.Lock()
+		sess.Status = "AUTH_REQUIRED"
+		sess.mu.Unlock()
 
 		for evt := range qrChan {
 			if evt.Event == "code" {
-				setQR(evt.Code)
-				log.Println("[Bridge] New QR code generated. Awaiting scan...")
+				sess.mu.Lock()
+				sess.QRText = evt.Code
+				sess.mu.Unlock()
+				log.Printf("[Bridge] New QR code generated for session %s", id)
 			} else if evt.Event == "success" {
-				setQR("")
-				setStatus("CONNECTED", "")
-				log.Println("[Bridge] Login successful!")
+				sess.mu.Lock()
+				sess.QRText = ""
+				sess.Status = "CONNECTED"
+				sess.mu.Unlock()
+				log.Printf("[Bridge] Login successful for session %s", id)
 			} else if evt.Event == "timeout" {
-				setQR("")
-				setStatus("DISCONNECTED", "QR code scan timeout.")
-				log.Println("[Bridge] QR code scan timed out.")
+				sess.mu.Lock()
+				sess.QRText = ""
+				sess.Status = "DISCONNECTED"
+				sess.LastError = "QR code scan timeout"
+				sess.mu.Unlock()
+				log.Printf("[Bridge] QR code timeout for session %s", id)
 			}
 		}
 	} else {
-		// Existing session, just connect
+		// Stored session connection
 		err = c.Connect()
 		if err != nil {
-			setStatus("DISCONNECTED", fmt.Sprintf("Failed to connect: %v", err))
+			sess.mu.Lock()
+			sess.Status = "DISCONNECTED"
+			sess.LastError = fmt.Sprintf("Failed to connect: %v", err)
+			sess.mu.Unlock()
 			return
 		}
-		setStatus("CONNECTED", "")
+		
+		sess.mu.Lock()
+		sess.Status = "CONNECTED"
+		sess.mu.Unlock()
+		log.Printf("[Bridge] Session successfully reconnected: %s", id)
 	}
 }
 
-func eventHandler(rawEvt interface{}) {
-	// We only care about connection events for status mapping
-	switch rawEvt.(type) {
-	case *events.Connected:
-		setStatus("CONNECTED", "")
-		setQR("")
-	case *events.Disconnected:
-		setStatus("DISCONNECTED", "Disconnected from WhatsApp server.")
-	case *events.LoggedOut:
-		setStatus("DISCONNECTED", "Logged out from session.")
-		setQR("")
-	}
-}
-
-// ── HTTP Endpoints ──────────────────────────────────────────────────────────
+// ── HTTP Routing Handlers ───────────────────────────────────────────────────
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
-	s, err := getStatus()
-	qr := getQR()
+	sessionsMu.RLock()
+	defer sessionsMu.RUnlock()
+
+	var list []*ClientSession = make([]*ClientSession, 0)
+	for _, sess := range sessions {
+		sess.mu.Lock()
+		list = append(list, &ClientSession{
+			ID:        sess.ID,
+			JID:       sess.JID,
+			Status:    sess.Status,
+			QRText:    sess.QRText,
+			LastError: sess.LastError,
+		})
+		sess.mu.Unlock()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":    s,
-		"qrText":    qr,
-		"lastError": err,
-	})
+	_ = json.NewEncoder(w).Encode(list)
 }
 
-func handleQR(w http.ResponseWriter, r *http.Request) {
-	qr := getQR()
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"qrText": qr,
-	})
-}
-
-func handleReconnect(w http.ResponseWriter, r *http.Request) {
+func handleNewSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	log.Println("[Bridge] Reconnection / Session Reset requested.")
+	log.Println("[Bridge] Initializing a new WhatsApp session...")
 
-	if client != nil {
-		client.Disconnect()
-	}
-
-	// Wipe database files to clear out credentials
-	dataDir := os.Getenv("DATA_DIR")
-	if dataDir == "" {
-		dataDir = "."
-	}
-	dbPath := filepath.Join(dataDir, "whatsmeow_auth.db")
-
-	_ = dbContainer.Close()
-
-	if _, err := os.Stat(dbPath); err == nil {
-		_ = os.Remove(dbPath)
-		// SQLite wal/shm cleanup if any
-		_ = os.Remove(dbPath + "-wal")
-		_ = os.Remove(dbPath + "-shm")
-		log.Println("[Bridge] Session database cleared.")
-	}
-
-	// Reinitialize
-	container, err := sqlstore.New(context.Background(), "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to re-init DB: %v", err), http.StatusInternalServerError)
-		return
-	}
-	dbContainer = container
-
-	go startClient()
+	deviceStore := dbContainer.NewDevice()
+	go startClient(deviceStore)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"message": "Reconnection initiated. Session cleared.",
+		"message": "Session creation initiated. Scan QR code to authenticate.",
+	})
+}
+
+func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+		http.Error(w, "Invalid body. Session 'id' required", http.StatusBadRequest)
+		return
+	}
+
+	sessionsMu.Lock()
+	sess, exists := sessions[req.ID]
+	if exists {
+		delete(sessions, req.ID)
+	}
+	sessionsMu.Unlock()
+
+	if !exists {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	sess.mu.Lock()
+	if sess.Client != nil {
+		sess.Client.Disconnect()
+	}
+	
+	// Delete device from Whatsmeow sqlstore database container
+	if sess.JID != nil {
+		log.Printf("[Bridge] Deleting device: %s from database container...", req.ID)
+		err := dbContainer.DeleteDevice(sess.JID)
+		if err != nil {
+			log.Printf("[Bridge] Warning: failed to delete device store row: %v", err)
+		}
+	}
+	sess.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"message": "Session successfully deleted and disconnected.",
 	})
 }
 
 func handleGroups(w http.ResponseWriter, r *http.Request) {
-	s, _ := getStatus()
-	if s != "CONNECTED" || client == nil {
-		http.Error(w, "WhatsApp is not connected", http.StatusServiceUnavailable)
+	from := r.URL.Query().Get("from")
+	
+	sessionsMu.RLock()
+	var selectedSess *ClientSession
+	if from != "" {
+		selectedSess = sessions[from]
+	} else {
+		// Default to the first CONNECTED session
+		for _, s := range sessions {
+			if s.Status == "CONNECTED" {
+				selectedSess = s
+				break
+			}
+		}
+	}
+	sessionsMu.RUnlock()
+
+	if selectedSess == nil || selectedSess.Client == nil {
+		http.Error(w, "No connected WhatsApp sessions found", http.StatusServiceUnavailable)
 		return
 	}
 
-	groups, err := client.GetJoinedGroups(context.Background())
+	groups, err := selectedSess.Client.GetJoinedGroups(context.Background())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch groups: %v", err), http.StatusInternalServerError)
 		return
@@ -294,21 +375,20 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(list)
 }
 
-type SendRequest struct {
-	To          string `json:"to"`
-	Text        string `json:"text"`
-	MediaPath   string `json:"mediaPath"`
-	MediaBase64 string `json:"mediaBase64"`
-	MediaType   string `json:"mediaType"` // "image" | "video"
-}
-
 func handleSend(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req SendRequest
+	var req struct {
+		From        string `json:"from"` // target sender JID
+		To          string `json:"to"`
+		Text        string `json:"text"`
+		MediaPath   string `json:"mediaPath"`
+		MediaBase64 string `json:"mediaBase64"`
+		MediaType   string `json:"mediaType"` // "image" | "video"
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -319,9 +399,23 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s, _ := getStatus()
-	if s != "CONNECTED" || client == nil {
-		http.Error(w, "WhatsApp is not connected", http.StatusServiceUnavailable)
+	sessionsMu.RLock()
+	var selectedSess *ClientSession
+	if req.From != "" {
+		selectedSess = sessions[req.From]
+	} else {
+		// Use first connected
+		for _, s := range sessions {
+			if s.Status == "CONNECTED" {
+				selectedSess = s
+				break
+			}
+		}
+	}
+	sessionsMu.RUnlock()
+
+	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Status != "CONNECTED" {
+		http.Error(w, "Target WhatsApp session is not connected", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -343,39 +437,114 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if req.MediaBase64 != "" {
-		// Send Media from Base64
 		data, decodeErr := base64.StdEncoding.DecodeString(req.MediaBase64)
 		if decodeErr != nil {
 			log.Printf("[Bridge] Failed to decode base64: %v", decodeErr)
 			http.Error(w, fmt.Sprintf("Failed to decode base64: %v", decodeErr), http.StatusBadRequest)
 			return
 		}
-		err = sendMediaData(jid, data, req.Text, req.MediaType)
+		err = sendMediaData(selectedSess.Client, jid, data, req.Text, req.MediaType)
 	} else if req.MediaPath != "" {
-		// Send Media from file path
-		err = sendMedia(jid, req.MediaPath, req.Text, req.MediaType)
+		err = sendMedia(selectedSess.Client, jid, req.MediaPath, req.Text, req.MediaType)
 	} else {
-		// Send Text
-		_, err = client.SendMessage(context.Background(), jid, &waE2E.Message{
+		_, err = selectedSess.Client.SendMessage(context.Background(), jid, &waE2E.Message{
 			Conversation: proto.String(req.Text),
 		})
 	}
 
 	if err != nil {
-		log.Printf("[Bridge] Failed to send message to %s: %v", jid.String(), err)
+		log.Printf("[Bridge] Failed to send message from %s to %s: %v", selectedSess.ID, jid.String(), err)
 		http.Error(w, fmt.Sprintf("Send failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[Bridge] Message successfully sent to %s", jid.String())
+	log.Printf("[Bridge] Message successfully sent from %s to %s", selectedSess.ID, jid.String())
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"message": "Message sent successfully",
 	})
 }
 
-func sendMedia(jid types.JID, path, caption, mediaType string) error {
-	// Read file
+// ── Join Group by Invite Link Handler ───────────────────────────────────────
+
+func handleJoinGroup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		From       string `json:"from"`       // target sender JID
+		InviteLink string `json:"inviteLink"` // WhatsApp invite link or code
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.InviteLink == "" {
+		http.Error(w, "Invite link or code is required", http.StatusBadRequest)
+		return
+	}
+
+	sessionsMu.RLock()
+	var selectedSess *ClientSession
+	if req.From != "" {
+		selectedSess = sessions[req.From]
+	} else {
+		// Use first connected
+		for _, s := range sessions {
+			if s.Status == "CONNECTED" {
+				selectedSess = s
+				break
+			}
+		}
+	}
+	sessionsMu.RUnlock()
+
+	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Status != "CONNECTED" {
+		http.Error(w, "Target WhatsApp session is not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse code from link if link is passed
+	// Pattern: matches chat.whatsapp.com/invite/CODE or chat.whatsapp.com/CODE
+	code := req.InviteLink
+	re := regexp.MustCompile(`(?:chat\.whatsapp\.com/(?:invite/)?)([a-zA-Z0-9\-]+)`)
+	matches := re.FindStringSubmatch(req.InviteLink)
+	if len(matches) > 1 {
+		code = matches[1]
+	}
+
+	log.Printf("[Bridge] Attempting to join group using code: %s for session: %s", code, selectedSess.ID)
+
+	jid, err := selectedSess.Client.JoinGroupWithLink(code)
+	if err != nil {
+		log.Printf("[Bridge] Join failed for code %s: %v", code, err)
+		http.Error(w, fmt.Sprintf("Failed to join group: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Bridge] Successfully joined group: %s", jid.String())
+
+	// Fetch details for joined group to return group name if possible
+	name := "Joined Group"
+	meta, err := selectedSess.Client.GetGroupInfo(jid)
+	if err == nil && meta != nil {
+		name = meta.Name
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"id":      jid.String(),
+		"name":    name,
+		"message": "Successfully joined group",
+	})
+}
+
+// ── Media Helpers ───────────────────────────────────────────────────────────
+
+func sendMedia(c *whatsmeow.Client, jid types.JID, path, caption, mediaType string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open media file: %w", err)
@@ -387,25 +556,23 @@ func sendMedia(jid types.JID, path, caption, mediaType string) error {
 		return fmt.Errorf("failed to read media file: %w", err)
 	}
 
-	return sendMediaData(jid, data, caption, mediaType)
+	return sendMediaData(c, jid, data, caption, mediaType)
 }
 
-func sendMediaData(jid types.JID, data []byte, caption, mediaType string) error {
+func sendMediaData(c *whatsmeow.Client, jid types.JID, data []byte, caption, mediaType string) error {
 	mimeType := http.DetectContentType(data)
 
-	// Upload to WhatsApp server
 	var uploadResp whatsmeow.UploadResponse
 	var err error
 	if mediaType == "video" {
-		uploadResp, err = client.Upload(context.Background(), data, whatsmeow.MediaVideo)
+		uploadResp, err = c.Upload(context.Background(), data, whatsmeow.MediaVideo)
 	} else {
-		uploadResp, err = client.Upload(context.Background(), data, whatsmeow.MediaImage)
+		uploadResp, err = c.Upload(context.Background(), data, whatsmeow.MediaImage)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to upload media to WhatsApp: %w", err)
 	}
 
-	// Prepare message payload
 	var msg waE2E.Message
 	if mediaType == "video" {
 		msg.VideoMessage = &waE2E.VideoMessage{
@@ -431,6 +598,6 @@ func sendMediaData(jid types.JID, data []byte, caption, mediaType string) error 
 		}
 	}
 
-	_, err = client.SendMessage(context.Background(), jid, &msg)
+	_, err = c.SendMessage(context.Background(), jid, &msg)
 	return err
 }

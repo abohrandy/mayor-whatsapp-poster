@@ -2,13 +2,11 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
-console.log('--- WHATSAPP SERVICE PROXY LOADED (GO BRIDGE) at ' + new Date().toLocaleTimeString() + ' ---');
+console.log('--- WHATSAPP SERVICE PROXY LOADED (GO BRIDGE - MULTI SESSION) at ' + new Date().toLocaleTimeString() + ' ---');
 
 class WhatsAppClient {
     constructor() {
-        this.status = 'DISCONNECTED';
-        this.qrText = '';
-        this.lastError = null;
+        this.sessions = [];
         this.initialized = false;
         
         let url = process.env.WHATSAPP_BRIDGE_URL || 'http://localhost:8080';
@@ -31,7 +29,7 @@ class WhatsAppClient {
         console.log(`[Proxy] Syncing connection with Go Whatsmeow Bridge at ${this.bridgeUrl}...`);
         
         // Initial sync
-        this.syncStatus();
+        await this.syncStatus();
         
         // Sync status from Go Whatsmeow Bridge periodically
         setInterval(() => this.syncStatus(), 3000);
@@ -40,65 +38,99 @@ class WhatsAppClient {
     async syncStatus() {
         try {
             const res = await axios.get(`${this.bridgeUrl}/status`);
-            const { status, qrText, lastError } = res.data;
+            const oldSessions = this.sessions;
+            this.sessions = res.data || [];
 
-            if (this.status !== status || this.qrText !== qrText || this.lastError !== lastError) {
-                const oldStatus = this.status;
-                this.status = status || 'DISCONNECTED';
-                this.qrText = qrText || '';
-                this.lastError = lastError || null;
+            // Detect any new connections
+            const { emitStatus, emitLog } = require('./socket');
+            emitStatus(this.getStatus());
 
-                const { emitStatus, emitLog } = require('./socket');
-                emitStatus(this.getStatus());
+            const db = await require('../models/database').getDb();
 
-                if (this.status === 'CONNECTED' && oldStatus !== 'CONNECTED') {
-                    emitLog({ type: 'success', message: 'WhatsApp Client is connected via Go Bridge!', timestamp: new Date().toISOString() });
+            // Simple diff check for newly connected accounts
+            for (const newSess of this.sessions) {
+                const oldSess = oldSessions.find(s => s.id === newSess.id);
+                if (newSess.status === 'CONNECTED' && (!oldSess || oldSess.status !== 'CONNECTED')) {
+                    emitLog({ 
+                        type: 'success', 
+                        message: `WhatsApp session linked: ${newSess.jid?.user || newSess.id}`, 
+                        timestamp: new Date().toISOString() 
+                    });
+
+                    // Promotion check: if this session is newly CONNECTED with JID,
+                    // check if there is an unmapped session matching it, and check if a temp session disappeared.
+                    if (newSess.id.includes('@')) {
+                        const mapped = await db.get('SELECT id FROM whatsapp_sessions WHERE session_id = ?', [newSess.id]);
+                        if (!mapped) {
+                            const missingTemp = oldSessions.find(s => s.id.startsWith('temp_') && !this.sessions.some(ns => ns.id === s.id));
+                            if (missingTemp) {
+                                console.log(`[Proxy] Promoting session in database: ${missingTemp.id} -> ${newSess.id}`);
+                                await db.run(
+                                    'UPDATE whatsapp_sessions SET session_id = ? WHERE session_id = ?',
+                                    [newSess.id, missingTemp.id]
+                                );
+                            }
+                        }
+                    }
                 }
             }
         } catch (err) {
-            if (this.status !== 'DISCONNECTED') {
-                this.status = 'DISCONNECTED';
-                this.qrText = '';
-                this.lastError = `Failed to contact Go Bridge: ${err.message}`;
-                
-                const { emitStatus } = require('./socket');
-                emitStatus(this.getStatus());
-            }
+            console.error('[Proxy] Failed to contact Go Bridge:', err.message);
+            // Don't completely overwrite sessions with empty, but mark bridge as offline
         }
     }
 
     getStatus() {
+        // Return full sessions array so the client UI can display and manage all accounts
         return {
-            status: this.status,
-            qrText: this.qrText,
-            lastError: this.lastError
+            sessions: this.sessions
         };
     }
 
-    async reconnect() {
+    async createSession() {
         try {
-            console.log('[Proxy] Requesting Go Bridge session reset...');
-            await axios.post(`${this.bridgeUrl}/reconnect`);
-            this.status = 'DISCONNECTED';
-            this.qrText = '';
-            this.lastError = null;
-
-            const { emitStatus } = require('./socket');
-            emitStatus(this.getStatus());
+            console.log('[Proxy] Requesting Go Bridge to create new session...');
+            const res = await axios.post(`${this.bridgeUrl}/session/new`);
+            await this.syncStatus();
+            return res.data;
         } catch (err) {
-            console.error('[Proxy] Failed to request reconnect from Go Bridge:', err.message);
+            console.error('[Proxy] Failed to create new session on Go Bridge:', err.message);
             throw err;
         }
     }
 
-    async sendTextMessage(to, text) {
+    async deleteSession(id) {
         try {
-            await axios.post(`${this.bridgeUrl}/send`, { to, text });
-            console.log(`[Proxy] Text message sent to ${to}`);
+            console.log(`[Proxy] Requesting Go Bridge to delete session: ${id}...`);
+            const res = await axios.post(`${this.bridgeUrl}/session/delete`, { id });
+            await this.syncStatus();
+            return res.data;
+        } catch (err) {
+            console.error(`[Proxy] Failed to delete session ${id} on Go Bridge:`, err.message);
+            throw err;
+        }
+    }
+
+    async joinGroup(from, inviteLink) {
+        try {
+            console.log(`[Proxy] Requesting session ${from || 'default'} to join group: ${inviteLink}...`);
+            const res = await axios.post(`${this.bridgeUrl}/join`, { from, inviteLink });
+            return res.data;
+        } catch (err) {
+            const errMsg = err.response?.data || err.message;
+            console.error('[Proxy] Failed to join group:', errMsg);
+            throw new Error(errMsg);
+        }
+    }
+
+    async sendTextMessage(to, text, from = null) {
+        try {
+            await axios.post(`${this.bridgeUrl}/send`, { from, to, text });
+            console.log(`[Proxy] Text message sent from ${from || 'default'} to ${to}`);
             return true;
         } catch (err) {
             const errMsg = err.response?.data || err.message;
-            console.error(`[Proxy] Failed to send text message to ${to}:`, errMsg);
+            console.error(`[Proxy] Failed to send text message from ${from || 'default'} to ${to}:`, errMsg);
             throw new Error(errMsg);
         }
     }
@@ -109,8 +141,9 @@ class WhatsAppClient {
      * @param {string} filePath - Absolute path to the media file
      * @param {string} caption  - Optional caption text
      * @param {string} mediaType - 'image' | 'video'
+     * @param {string} from - optional sender JID JID.String()
      */
-    async sendMedia(groupId, filePath, caption = '', mediaType = 'image') {
+    async sendMedia(groupId, filePath, caption = '', mediaType = 'image', from = null) {
         // Resolve absolute path respecting DATA_DIR persistent storage if configured
         const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
         const absPath = path.isAbsolute(filePath)
@@ -125,23 +158,19 @@ class WhatsAppClient {
             const mediaBase64 = fs.readFileSync(absPath, { encoding: 'base64' });
 
             await axios.post(`${this.bridgeUrl}/send`, {
+                from: from,
                 to: groupId,
                 text: caption,
                 mediaBase64: mediaBase64,
                 mediaType: mediaType
             });
-            console.log(`[Proxy] Media (${mediaType}) sent to ${groupId}`);
+            console.log(`[Proxy] Media (${mediaType}) sent from ${from || 'default'} to ${groupId}`);
             return true;
         } catch (err) {
             const errMsg = err.response?.data || err.message;
-            console.error(`[Proxy] Failed to send media to ${groupId}:`, errMsg);
+            console.error(`[Proxy] Failed to send media to ${groupId} from ${from || 'default'}:`, errMsg);
             throw new Error(errMsg);
         }
-    }
-
-    // Legacy alias kept for compatibility
-    async sendImageWithCaption(groupId, imagePath, caption) {
-        return this.sendMedia(groupId, imagePath, caption, 'image');
     }
 
     // Helper JID formatter
@@ -152,12 +181,14 @@ class WhatsAppClient {
     }
 
     // Retrieve participating chats/groups
-    async getChats() {
+    async getChats(from = null) {
         try {
-            const res = await axios.get(`${this.bridgeUrl}/groups`);
+            const res = await axios.get(`${this.bridgeUrl}/groups`, {
+                params: { from }
+            });
             return res.data;
         } catch (err) {
-            console.error('[Proxy] Failed to fetch groups from Go Bridge:', err.message);
+            console.error(`[Proxy] Failed to fetch groups from Go Bridge for ${from || 'default'}:`, err.message);
             return [];
         }
     }

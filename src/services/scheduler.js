@@ -112,7 +112,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     // Fetch group details to map JID to Name
     let groupMap = {};
     try {
-        const chats = await waClient.getChats();
+        const chats = await waClient.getChats(ann.sender_jid);
         if (Array.isArray(chats)) {
             chats.forEach(chat => {
                 if (chat.id) {
@@ -129,7 +129,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     for (const groupId of targetGroups) {
         const groupName = groupMap[groupId] || groupId;
         try {
-            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2);
+            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, ann.sender_jid);
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });
@@ -208,13 +208,13 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
 /**
  * Send to group with retry support and exponential backoff on rate limiting (error 420).
  */
-async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2) {
+async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2, from = null) {
     let attempt = 0;
     let delay = 3000; // start with 3 seconds retry delay on error
     const groupName = groupMap[groupId] || groupId;
     while (attempt < maxRetries) {
         try {
-            await sendToGroup(groupId, mediaEntry, caption);
+            await sendToGroup(groupId, mediaEntry, caption, from);
             return; // success!
         } catch (err) {
             attempt++;
@@ -241,16 +241,16 @@ async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {},
 /**
  * Send a media file (or text-only) to a single WhatsApp group.
  */
-async function sendToGroup(groupId, mediaEntry, caption) {
+async function sendToGroup(groupId, mediaEntry, caption, from = null) {
     try {
         if (mediaEntry && mediaEntry.path) {
-            await waClient.sendMedia(groupId, mediaEntry.path, caption, mediaEntry.type || 'image');
+            await waClient.sendMedia(groupId, mediaEntry.path, caption, mediaEntry.type || 'image', from);
         } else {
-            await waClient.sendTextMessage(groupId, caption);
+            await waClient.sendTextMessage(groupId, caption, from);
         }
-        console.log(`[Scheduler] Sent to ${groupId} ✓`);
+        console.log(`[Scheduler] Sent to ${groupId} via ${from || 'default'} ✓`);
     } catch (err) {
-        const msg = `Failed to send to ${groupId}: ${err.message}`;
+        const msg = `Failed to send to ${groupId} via ${from || 'default'}: ${err.message}`;
         console.error('[Scheduler]', msg);
         emitLog({ type: 'error', message: msg, timestamp: new Date().toISOString() });
         throw err;

@@ -15,6 +15,30 @@ async function initDb() {
         driver: sqlite3.Database
     });
 
+    // Users table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            subscription_status TEXT DEFAULT 'inactive', -- active, inactive, past_due
+            paystack_customer_code TEXT DEFAULT NULL,
+            paystack_subscription_code TEXT DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // WhatsApp Sessions table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_id TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
     // Announcements table
     await db.exec(`
         CREATE TABLE IF NOT EXISTS announcements (
@@ -27,11 +51,13 @@ async function initDb() {
             is_recurring INTEGER NOT NULL DEFAULT 0,  -- 0=one-time, 1=recurring
             recurrence_days INTEGER DEFAULT NULL,      -- "every N days"
             recurrence_days_of_week TEXT NOT NULL DEFAULT '[]', -- JSON array of day indices (0=Sunday, 1=Monday, etc)
+            sender_jid TEXT DEFAULT NULL,             -- target WhatsApp JID to send from
             post_time TEXT DEFAULT '08:00',           -- HH:MM (24h)
             target_groups TEXT NOT NULL DEFAULT '[]', -- JSON array of group IDs
             ribbon_index INTEGER NOT NULL DEFAULT 0,  -- which media file fires next
             status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
             next_post_at TEXT DEFAULT NULL,           -- ISO datetime string
+            user_id INTEGER DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
@@ -56,6 +82,26 @@ async function initDb() {
             console.log('Migrated announcements table: added recurrence_days_of_week column.');
         } catch (err) {
             console.error('Failed to add recurrence_days_of_week to announcements:', err);
+        }
+    }
+
+    const hasSenderJid = annColumns.some(col => col.name === 'sender_jid');
+    if (!hasSenderJid) {
+        try {
+            await db.exec("ALTER TABLE announcements ADD COLUMN sender_jid TEXT DEFAULT NULL");
+            console.log('Migrated announcements table: added sender_jid column.');
+        } catch (err) {
+            console.error('Failed to add sender_jid to announcements:', err);
+        }
+    }
+
+    const hasAnnUserId = annColumns.some(col => col.name === 'user_id');
+    if (!hasAnnUserId) {
+        try {
+            await db.exec("ALTER TABLE announcements ADD COLUMN user_id INTEGER DEFAULT NULL");
+            console.log('Migrated announcements table: added user_id column.');
+        } catch (err) {
+            console.error('Failed to add user_id to announcements:', err);
         }
     }
 
@@ -93,19 +139,66 @@ async function initDb() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action_type TEXT NOT NULL,
             description TEXT NOT NULL,
+            user_id INTEGER DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    const logColumns = await db.all('PRAGMA table_info(activity_logs)');
+    const hasLogUserId = logColumns.some(col => col.name === 'user_id');
+    if (!hasLogUserId) {
+        try {
+            await db.exec("ALTER TABLE activity_logs ADD COLUMN user_id INTEGER DEFAULT NULL");
+            console.log('Migrated activity_logs table: added user_id column.');
+        } catch (err) {
+            console.error('Failed to add user_id to activity_logs:', err);
+        }
+    }
 
     // Posting profiles
     await db.exec(`
         CREATE TABLE IF NOT EXISTS posting_profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
             groups TEXT NOT NULL DEFAULT '[]',
+            user_id INTEGER DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    const profColumns = await db.all('PRAGMA table_info(posting_profiles)');
+    const hasProfUserId = profColumns.some(col => col.name === 'user_id');
+    if (!hasProfUserId) {
+        try {
+            await db.exec("ALTER TABLE posting_profiles ADD COLUMN user_id INTEGER DEFAULT NULL");
+            console.log('Migrated posting_profiles table: added user_id column.');
+        } catch (err) {
+            console.error('Failed to add user_id to posting_profiles:', err);
+        }
+    }
+
+    // Assign any historical orphan records to the first registered user
+    try {
+        const firstUser = await db.get('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+        if (firstUser) {
+            await db.run('UPDATE announcements SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
+            await db.run('UPDATE posting_profiles SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
+            await db.run('UPDATE activity_logs SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
+            
+            // Also map existing whatsapp sessions from Go store if any exist and are not mapped
+            const waClient = require('../services/whatsapp');
+            if (waClient.sessions && waClient.sessions.length > 0) {
+                for (const sess of waClient.sessions) {
+                    await db.run(
+                        'INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)',
+                        [firstUser.id, sess.id]
+                    );
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Failed to run historical orphan user adoption migration:', err);
+    }
 
     console.log('Database initialized successfully.');
     return db;
@@ -120,12 +213,12 @@ function getDb() {
     return dbPromise;
 }
 
-async function logActivity(action_type, description) {
+async function logActivity(action_type, description, user_id = null) {
     try {
         const db = await getDb();
         await db.run(
-            'INSERT INTO activity_logs (action_type, description) VALUES (?, ?)',
-            [action_type, description]
+            'INSERT INTO activity_logs (action_type, description, user_id) VALUES (?, ?, ?)',
+            [action_type, description, user_id]
         );
         const { emitStats } = require('../services/socket');
         emitStats({ action: 'new_log' });

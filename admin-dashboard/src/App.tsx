@@ -1,15 +1,66 @@
-import { useState } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck } from 'lucide-react';
+import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import Announcements from './components/Announcements';
 import WhatsAppStatus from './components/WhatsAppStatus';
 import Settings from './components/Settings';
 import ActivityLogs from './components/ActivityLogs';
 import PostingProfiles from './components/PostingProfiles';
+import Login from './components/Login';
+import Signup from './components/Signup';
+import Subscription from './components/Subscription';
+import UserManagement from './components/UserManagement';
+
+// Setup global axios headers interceptor
+axios.interceptors.request.use(config => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openNewAnnouncementModal, setOpenNewAnnouncementModal] = useState(false);
+
+  // Authentication & Subscription states
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [user, setUser] = useState<any | null>(null);
+  const [authView, setAuthView] = useState<'login' | 'signup'>('login');
+  const [checkingAuth, setCheckingAuth] = useState(!!localStorage.getItem('token'));
+
+  useEffect(() => {
+    if (token) {
+      checkCurrentUser();
+    }
+  }, [token]);
+
+  const checkCurrentUser = async () => {
+    try {
+      const res = await axios.get('/api/auth/me');
+      setUser(res.data.user);
+    } catch (err) {
+      console.error('Failed to verify token', err);
+      handleLogout();
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
+
+  const handleLoginSuccess = (newToken: string, loggedUser: any) => {
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+    setUser(loggedUser);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    setActiveTab('dashboard');
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -32,6 +83,7 @@ function App() {
       case 'activity': return <ActivityLogs />;
       case 'whatsapp': return <WhatsAppStatus />;
       case 'settings': return <Settings />;
+      case 'users': return <UserManagement />;
       default: return <Dashboard setActiveTab={setActiveTab} />;
     }
   };
@@ -45,6 +97,10 @@ function App() {
     { id: 'settings', label: 'Settings', Icon: SettingsIcon },
   ];
 
+  if (user && user.is_admin) {
+    navItems.push({ id: 'users', label: 'User Management', Icon: ShieldCheck });
+  }
+
   const tabLabels: Record<string, string> = {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
@@ -52,8 +108,49 @@ function App() {
     activity: 'Activity Logs',
     whatsapp: 'WhatsApp Status',
     settings: 'Settings',
+    users: 'User Management',
   };
 
+  // 1. Loading state
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+        <p className="text-slate-400 text-sm">Verifying your account...</p>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated views
+  if (!token || !user) {
+    if (authView === 'signup') {
+      return (
+        <Signup
+          onSignupSuccess={handleLoginSuccess}
+          onNavigateToLogin={() => setAuthView('login')}
+        />
+      );
+    }
+    return (
+      <Login
+        onLoginSuccess={handleLoginSuccess}
+        onNavigateToSignup={() => setAuthView('signup')}
+      />
+    );
+  }
+
+  // 3. Billing subscription lock
+  if (user.subscription_status !== 'active') {
+    return (
+      <Subscription
+        user={user}
+        onLogout={handleLogout}
+        onSubscriptionSuccess={checkCurrentUser}
+      />
+    );
+  }
+
+  // 4. Authenticated main workspace
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
@@ -62,7 +159,7 @@ function App() {
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent">
             WhatsApp Poster
           </h1>
-          <p className="text-xs text-slate-500 mt-1">WhatsApp Announcements</p>
+          <p className="text-xs text-slate-500 mt-1">SaaS Multi-Account Poster</p>
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
@@ -79,16 +176,23 @@ function App() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700/50">
-          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition-colors cursor-pointer">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-bold">
-              MP
+        {/* User profile footer with Logout button */}
+        <div className="p-4 border-t border-slate-700/50 space-y-3">
+          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/20 border border-slate-700/30">
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-bold text-white">
+              {user.email.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <p className="text-sm font-medium">Admin User</p>
-              <p className="text-xs text-slate-500">Administrator</p>
+            <div className="truncate flex-1">
+              <p className="text-xs font-semibold text-white truncate">{user.email}</p>
+              <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Premium Member</p>
             </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 rounded-lg transition-all cursor-pointer"
+          >
+            <LogOut size={14} /> Log Out
+          </button>
         </div>
       </aside>
 
@@ -103,7 +207,7 @@ function App() {
             <div className="h-4 w-px bg-slate-700"></div>
             <button id="btn-admin" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 glass-card">
               <User size={18} />
-              Admin
+              SaaS Panel
             </button>
           </div>
         </header>

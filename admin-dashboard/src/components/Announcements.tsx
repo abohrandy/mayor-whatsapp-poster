@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, Trash2, Edit2, X, Send, Film,
-  RefreshCw, ToggleLeft, ToggleRight, Clock, Users, Repeat, Calendar,
+  RefreshCw, ToggleLeft, ToggleRight, Clock, Users, User, Repeat, Calendar,
   Video, UploadCloud, Eye, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import axios from 'axios';
@@ -27,6 +27,7 @@ interface Announcement {
   status: 'active' | 'inactive';
   next_post_at: string | null;
   created_at: string;
+  sender_jid: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
   const [postingId, setPostingId] = useState<number | null>(null);
   const [previewAnn, setPreviewAnn] = useState<Announcement | null>(null);
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number>(0);
+  const [sessions, setSessions] = useState<any[]>([]);
 
   const defaultForm = {
     title: '',
@@ -105,6 +107,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     post_time: '08:00',
     next_post_at: '',
     target_groups: [] as string[],
+    sender_jid: '',
   };
   const [form, setForm] = useState(defaultForm);
 
@@ -153,10 +156,22 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     } catch (e) { console.error('Failed to fetch announcements', e); }
   };
 
-  const fetchGroups = async () => {
+  const fetchSessions = async () => {
+    try {
+      const res = await axios.get(`${API}/whatsapp/status`);
+      setSessions(res.data?.sessions || []);
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  const fetchGroups = async (senderJid?: any) => {
+    const jid = (senderJid && typeof senderJid === 'string') ? senderJid : (form.sender_jid || '');
     try {
       setGroupsLoading(true);
-      const res = await axios.get(`${API}/whatsapp/chats`);
+      const res = await axios.get(`${API}/whatsapp/chats`, {
+        params: jid ? { from: jid } : {}
+      });
       setGroups(res.data);
     } catch {
       setGroups([]);
@@ -172,7 +187,8 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     }
   };
 
-  const openModal = (ann?: Announcement) => {
+  const openModal = async (ann?: Announcement) => {
+    await fetchSessions();
     if (ann) {
       setEditingId(ann.id);
       setForm({
@@ -186,15 +202,17 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
         post_time: ann.post_time || '08:00',
         next_post_at: ann.next_post_at ? ann.next_post_at.slice(0, 16) : '',
         target_groups: parseJSON<string[]>(ann.target_groups, []),
+        sender_jid: ann.sender_jid || '',
       });
       setExistingMedia(parseJSON<MediaFile[]>(ann.media_files, []));
+      fetchGroups(ann.sender_jid || '');
     } else {
       setEditingId(null);
       setForm(defaultForm);
       setExistingMedia([]);
+      fetchGroups('');
     }
     setNewFiles([]);
-    fetchGroups();
     fetchProfiles();
     setShowModal(true);
   };
@@ -264,6 +282,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
       fd.append('keep_media', '1'); // keep existing when editing
+      fd.append('sender_jid', form.sender_jid || '');
 
       if (form.is_recurring) {
         const hasDays = form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0;
@@ -340,6 +359,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
       fd.append('keep_media', '1');
+      fd.append('sender_jid', form.sender_jid || '');
 
       if (form.is_recurring) {
         const hasDays = form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0;
@@ -862,6 +882,32 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* ── Sender Account ────────────────────────────────────────────── */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                  <User size={15} /> Sender WhatsApp Account
+                </label>
+                <select
+                  value={form.sender_jid || ''}
+                  onChange={(e) => {
+                    const newJid = e.target.value;
+                    setForm({ ...form, sender_jid: newJid });
+                    fetchGroups(newJid);
+                  }}
+                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white cursor-pointer"
+                >
+                  <option value="">Default (First Available Connected Account)</option>
+                  {sessions.filter(s => s.status === 'CONNECTED').map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.jid ? `${s.jid.split('@')[0]} (${s.id})` : s.id}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500">
+                  Select which connected WhatsApp account will post this announcement. Changing this will reload the target groups below for that account.
+                </p>
               </div>
 
               {/* ── Target Groups ─────────────────────────────────────────────── */}
