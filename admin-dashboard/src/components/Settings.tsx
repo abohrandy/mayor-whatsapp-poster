@@ -22,6 +22,7 @@ const Settings = () => {
   const [settings, setSettings] = useState({
     timezone: 'Africa/Lagos',
     default_post_time: '08:00',
+    send_delay_seconds: 5,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,6 +120,25 @@ const Settings = () => {
             />
             <p className="mt-1 text-xs text-slate-500">
               Pre-filled in the announcement form when creating new posts.
+            </p>
+          </div>
+
+          {/* Message Send Delay */}
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+              <Clock size={15} /> Message Send Delay (seconds)
+            </label>
+            <input
+              id="input-send-delay"
+              type="number"
+              min="1"
+              max="120"
+              value={settings.send_delay_seconds || 5}
+              onChange={e => setSettings({ ...settings, send_delay_seconds: parseInt(e.target.value) || 5 })}
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Delay between sending messages to individual groups (prevents rate limiting / error 420). Recommended: 5-10 seconds.
             </p>
           </div>
 

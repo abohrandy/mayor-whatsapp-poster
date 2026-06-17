@@ -15,6 +15,8 @@ interface Announcement {
   id: number;
   title: string;
   caption: string;
+  caption_variations: string; // JSON string array
+  caption_index: number;
   media_files: string; // JSON
   is_recurring: number;
   recurrence_days: number | null;
@@ -84,6 +86,7 @@ const Announcements = () => {
   const defaultForm = {
     title: '',
     caption: '',
+    caption_variations: [] as string[],
     is_recurring: false,
     recurrence_days: 7,
     post_time: '08:00',
@@ -155,6 +158,7 @@ const Announcements = () => {
       setForm({
         title: ann.title,
         caption: ann.caption || '',
+        caption_variations: parseJSON<string[]>(ann.caption_variations || '[]', []),
         is_recurring: !!ann.is_recurring,
         recurrence_days: ann.recurrence_days || 7,
         post_time: ann.post_time || '08:00',
@@ -221,6 +225,7 @@ const Announcements = () => {
       const fd = new FormData();
       fd.append('title', form.title);
       fd.append('caption', form.caption);
+      fd.append('caption_variations', JSON.stringify(form.caption_variations || []));
       fd.append('is_recurring', form.is_recurring ? '1' : '0');
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
@@ -275,6 +280,7 @@ const Announcements = () => {
       const fd = new FormData();
       fd.append('title', form.title);
       fd.append('caption', form.caption);
+      fd.append('caption_variations', JSON.stringify(form.caption_variations || []));
       fd.append('is_recurring', form.is_recurring ? '1' : '0');
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
@@ -495,14 +501,84 @@ const Announcements = () => {
               </div>
 
               {/* Caption */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Caption / Message</label>
-                <textarea
-                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none resize-y min-h-[80px] text-white"
-                  placeholder="Message text that will accompany the media..."
-                  value={form.caption}
-                  onChange={e => setForm({ ...form, caption: e.target.value })}
-                />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-slate-400">Caption / Message</label>
+                  <label className="flex items-center gap-2 text-xs text-indigo-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="accent-indigo-500 rounded"
+                      checked={form.caption_variations && form.caption_variations.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setForm(prev => ({
+                            ...prev,
+                            caption_variations: prev.caption ? [prev.caption] : ['']
+                          }));
+                        } else {
+                          setForm(prev => ({
+                            ...prev,
+                            caption_variations: []
+                          }));
+                        }
+                      }}
+                    />
+                    Enable Text Variations (Round Robin)
+                  </label>
+                </div>
+
+                {form.caption_variations && form.caption_variations.length > 0 ? (
+                  <div className="space-y-3 bg-slate-900/50 p-4 border border-slate-700/50 rounded-xl">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-400 font-semibold">Text Variations List</span>
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, caption_variations: [...(prev.caption_variations || []), ''] }))}
+                        className="text-xs px-2 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded border border-indigo-500/30 font-bold transition-all"
+                      >
+                        + Add Variation
+                      </button>
+                    </div>
+
+                    {form.caption_variations.map((val, idx) => (
+                      <div key={idx} className="flex gap-2 items-start relative group/var">
+                        <textarea
+                          required
+                          className="flex-1 p-2 bg-slate-800 border border-slate-700 rounded-lg focus:border-indigo-500 outline-none text-sm text-white resize-y min-h-[50px]"
+                          placeholder={`Variation #${idx + 1}`}
+                          value={val}
+                          onChange={e => {
+                            const newVars = [...form.caption_variations];
+                            newVars[idx] = e.target.value;
+                            setForm(prev => ({ ...prev, caption_variations: newVars }));
+                          }}
+                        />
+                        {form.caption_variations.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newVars = form.caption_variations.filter((_, i) => i !== idx);
+                              setForm(prev => ({ ...prev, caption_variations: newVars }));
+                            }}
+                            className="p-2 text-rose-500/70 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-slate-500">
+                      When recurring is enabled, the sender cycles (round robin) through these variations on each post schedule.
+                    </p>
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none resize-y min-h-[80px] text-white"
+                    placeholder="Message text that will accompany the media..."
+                    value={form.caption}
+                    onChange={e => setForm({ ...form, caption: e.target.value })}
+                  />
+                )}
               </div>
 
               {/* ── Media Ribbon ─────────────────────────────────────────────── */}
@@ -752,7 +828,15 @@ const Announcements = () => {
               <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-900 flex-shrink-0">
                 <div>
                   <h3 className="text-lg font-bold text-white">Announcement Preview</h3>
-                  <p className="text-xs text-slate-400">Mockup of how this appears on WhatsApp</p>
+                  {(() => {
+                    const vars = parseJSON<string[]>(previewAnn.caption_variations || '[]', []);
+                    return (
+                      <p className="text-xs text-slate-400">
+                        Mockup of how this appears on WhatsApp
+                        {vars.length > 1 && ` (Text Variation: ${(previewAnn.caption_index % vars.length) + 1}/${vars.length})`}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <button onClick={closePreview} className="text-slate-500 hover:text-white cursor-pointer">
                   <X size={24} />
@@ -811,9 +895,18 @@ const Announcements = () => {
                   )}
 
                   {/* Caption Message */}
-                  <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap px-1">
-                    {previewAnn.caption || previewAnn.title}
-                  </p>
+                  {(() => {
+                    const vars = parseJSON<string[]>(previewAnn.caption_variations || '[]', []);
+                    let captionText = previewAnn.caption || previewAnn.title;
+                    if (vars.length > 0) {
+                      captionText = vars[previewAnn.caption_index % vars.length];
+                    }
+                    return (
+                      <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap px-1">
+                        {captionText}
+                      </p>
+                    );
+                  })()}
 
                   {/* Meta Time info */}
                   <div className="flex items-center gap-1 self-end text-[10px] text-emerald-300/80 font-medium select-none">

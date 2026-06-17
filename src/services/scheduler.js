@@ -88,21 +88,40 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     const ribbonIdx = ann.ribbon_index || 0;
     let mediaEntry = mediaFiles.length > 0 ? mediaFiles[ribbonIdx % mediaFiles.length] : null;
 
-    const caption = ann.caption || ann.title;
+    // Determine caption (caption variations index)
+    let captionVariations = [];
+    try { captionVariations = JSON.parse(ann.caption_variations || '[]'); } catch { captionVariations = []; }
+
+    let caption = ann.caption || ann.title;
+    if (captionVariations.length > 0) {
+        const captionIdx = ann.caption_index || 0;
+        caption = captionVariations[captionIdx % captionVariations.length];
+    }
+
+    // Fetch send delay from settings
+    let sendDelayMs = 5000;
+    try {
+        const settings = await db.get('SELECT send_delay_seconds FROM settings WHERE id = 1');
+        if (settings && settings.send_delay_seconds !== undefined) {
+            sendDelayMs = settings.send_delay_seconds * 1000;
+        }
+    } catch (err) {
+        console.error('[Scheduler] Failed to get send_delay_seconds settings:', err);
+    }
 
     // Send to ALL target groups sequentially with a delay to prevent timeouts/congestion
     const sendResults = [];
     for (const groupId of targetGroups) {
         try {
-            await sendToGroup(groupId, mediaEntry, caption);
+            await sendToGroupWithRetry(groupId, mediaEntry, caption);
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });
             // Log specific error message to DB
             await logActivity('announcement_error', `Failed to send to group ${groupId}: ${err.message}`);
         }
-        // 1.5-second delay between sending to groups to avoid rate-limiting and timeouts
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Configurable delay between sending to groups to avoid rate-limiting and timeouts
+        await new Promise(resolve => setTimeout(resolve, sendDelayMs));
     }
 
     const succeeded = sendResults.filter(r => r.status === 'fulfilled').length;
@@ -118,6 +137,13 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
             // Advance ribbon index (cycle through media files)
             const nextRibbonIdx = mediaFiles.length > 1 ? (ribbonIdx + 1) % mediaFiles.length : 0;
 
+            // Advance caption index (cycle through text variations)
+            let nextCaptionIdx = 0;
+            if (captionVariations.length > 1) {
+                const captionIdx = ann.caption_index || 0;
+                nextCaptionIdx = (captionIdx + 1) % captionVariations.length;
+            }
+
             // Recalculate next_post_at: now + recurrence_days
             const recurrenceDays = ann.recurrence_days || 1;
             const nextPostAt = new Date();
@@ -129,8 +155,8 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
             }
 
             await db.run(
-                'UPDATE announcements SET ribbon_index = ?, next_post_at = ? WHERE id = ?',
-                [nextRibbonIdx, nextPostAt.toISOString(), ann.id]
+                'UPDATE announcements SET ribbon_index = ?, caption_index = ?, next_post_at = ? WHERE id = ?',
+                [nextRibbonIdx, nextCaptionIdx, nextPostAt.toISOString(), ann.id]
             );
         } else {
             // One-time: mark inactive
@@ -138,6 +164,38 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
                 `UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`,
                 [ann.id]
             );
+        }
+    }
+}
+
+/**
+ * Send to group with retry support and exponential backoff on rate limiting (error 420).
+ */
+async function sendToGroupWithRetry(groupId, mediaEntry, caption, maxRetries = 3) {
+    let attempt = 0;
+    let delay = 3000; // start with 3 seconds retry delay on error
+    while (attempt < maxRetries) {
+        try {
+            await sendToGroup(groupId, mediaEntry, caption);
+            return; // success!
+        } catch (err) {
+            attempt++;
+            const isRateLimit = err.message && (err.message.includes('420') || err.message.toLowerCase().includes('rate limit'));
+            
+            if (isRateLimit && attempt < maxRetries) {
+                const waitSec = Math.round(delay / 1000);
+                console.warn(`[Scheduler] Rate limited (420) sending to group ${groupId}. Attempt ${attempt}/${maxRetries}. Retrying in ${waitSec}s...`);
+                await logActivity('announcement_error', `Rate limited (420) sending to group ${groupId}. Retrying in ${waitSec}s... (Attempt ${attempt}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2.5; // increase retry delay exponentially
+            } else {
+                if (attempt < maxRetries) {
+                    console.warn(`[Scheduler] Error sending to group ${groupId}. Attempt ${attempt}/${maxRetries}. Retrying in 2s... Error: ${err.message}`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                } else {
+                    throw err; // throw last error if max retries exceeded
+                }
+            }
         }
     }
 }

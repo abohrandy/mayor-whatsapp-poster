@@ -37,7 +37,7 @@ const announcementController = {
     async create(req, res) {
         try {
             const {
-                title, caption, is_recurring, recurrence_days,
+                title, caption, caption_variations, is_recurring, recurrence_days,
                 post_time, target_groups, next_post_at
             } = req.body;
 
@@ -74,14 +74,19 @@ const announcementController = {
                 nextPostAt = null;
             }
 
+            // Parse caption_variations
+            let variations = [];
+            try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
+
             const db = await initDb();
             const result = await db.run(
                 `INSERT INTO announcements
-                    (title, caption, media_files, is_recurring, recurrence_days, post_time, target_groups, ribbon_index, status, next_post_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'active', ?)`,
+                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, post_time, target_groups, ribbon_index, status, next_post_at)
+                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 'active', ?)`,
                 [
                     title,
                     caption || '',
+                    JSON.stringify(variations),
                     JSON.stringify(mediaFiles),
                     parseInt(is_recurring) || 0,
                     recurrence_days ? parseInt(recurrence_days) : null,
@@ -104,7 +109,7 @@ const announcementController = {
         try {
             const { id } = req.params;
             const {
-                title, caption, is_recurring, recurrence_days,
+                title, caption, caption_variations, is_recurring, recurrence_days,
                 post_time, target_groups, next_post_at, keep_media
             } = req.body;
 
@@ -137,14 +142,18 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
+            let variations = [];
+            try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
+
             await db.run(
                 `UPDATE announcements
-                 SET title = ?, caption = ?, media_files = ?, is_recurring = ?,
+                 SET title = ?, caption = ?, caption_variations = ?, media_files = ?, is_recurring = ?,
                      recurrence_days = ?, post_time = ?, target_groups = ?, next_post_at = ?
                  WHERE id = ?`,
                 [
                     title,
                     caption || '',
+                    JSON.stringify(variations),
                     JSON.stringify(mediaFiles),
                     parseInt(is_recurring) || 0,
                     recurrence_days ? parseInt(recurrence_days) : null,
