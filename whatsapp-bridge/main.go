@@ -67,7 +67,7 @@ func main() {
 	dbContainer = container
 
 	// Load existing sessions from database
-	devices, err := dbContainer.GetAllDevices()
+	devices, err := dbContainer.GetAllDevices(context.Background())
 	if err != nil {
 		log.Printf("[Bridge] Warning: Failed to retrieve stored sessions: %v", err)
 	} else {
@@ -145,7 +145,7 @@ func startClient(deviceStore *store.Device) {
 
 	// Handle events
 	c.AddEventHandler(func(rawEvt interface{}) {
-		switch evt := rawEvt.(type) {
+		switch rawEvt.(type) {
 		case *events.Connected:
 			sess.mu.Lock()
 			sess.Status = "CONNECTED"
@@ -224,7 +224,7 @@ func startClient(deviceStore *store.Device) {
 		}
 	} else {
 		// Stored session connection
-		err = c.Connect()
+		err := c.Connect()
 		if err != nil {
 			sess.mu.Lock()
 			sess.Status = "DISCONNECTED"
@@ -314,9 +314,17 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	// Delete device from Whatsmeow sqlstore database container
 	if sess.JID != nil {
 		log.Printf("[Bridge] Deleting device: %s from database container...", req.ID)
-		err := dbContainer.DeleteDevice(sess.JID)
-		if err != nil {
-			log.Printf("[Bridge] Warning: failed to delete device store row: %v", err)
+		devices, err := dbContainer.GetAllDevices(context.Background())
+		if err == nil {
+			for _, dev := range devices {
+				if dev.ID != nil && dev.ID.String() == sess.JID.String() {
+					err = dbContainer.DeleteDevice(context.Background(), dev)
+					if err != nil {
+						log.Printf("[Bridge] Warning: failed to delete device store row: %v", err)
+					}
+					break
+				}
+			}
 		}
 	}
 	sess.mu.Unlock()
@@ -518,7 +526,7 @@ func handleJoinGroup(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[Bridge] Attempting to join group using code: %s for session: %s", code, selectedSess.ID)
 
-	jid, err := selectedSess.Client.JoinGroupWithLink(code)
+	jid, err := selectedSess.Client.JoinGroupWithLink(context.Background(), code)
 	if err != nil {
 		log.Printf("[Bridge] Join failed for code %s: %v", code, err)
 		http.Error(w, fmt.Sprintf("Failed to join group: %v", err), http.StatusInternalServerError)
@@ -529,7 +537,7 @@ func handleJoinGroup(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch details for joined group to return group name if possible
 	name := "Joined Group"
-	meta, err := selectedSess.Client.GetGroupInfo(jid)
+	meta, err := selectedSess.Client.GetGroupInfo(context.Background(), jid)
 	if err == nil && meta != nil {
 		name = meta.Name
 	}
