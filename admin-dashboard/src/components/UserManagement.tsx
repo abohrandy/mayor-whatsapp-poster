@@ -6,8 +6,9 @@ interface SaaSUser {
   id: number;
   email: string;
   subscription_status: 'active' | 'inactive';
-  tier: 'trial' | 'premium';
+  tier: 'trial' | 'plus';
   trial_ends_at: string | null;
+  paystack_subscription_code: string | null;
   sessions_count: number;
   announcements_count: number;
   created_at: string;
@@ -47,7 +48,7 @@ const UserManagement = () => {
     }
   };
 
-  const handleToggleTier = async (userId: number, newTier: 'trial' | 'premium') => {
+  const handleToggleTier = async (userId: number, newTier: 'trial' | 'plus') => {
     setActionId(userId);
     try {
       await axios.post(`/api/admin/users/${userId}/tier`, { tier: newTier });
@@ -155,18 +156,24 @@ const UserManagement = () => {
               <tbody className="divide-y divide-slate-800 text-slate-300 text-xs">
                 {filteredUsers.map(user => {
                   const isActive = user.subscription_status === 'active';
+                  const isManualUpgrade = user.tier === 'plus' && !user.paystack_subscription_code;
                   return (
                     <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
-                      <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
+                       <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
                       <td className="px-6 py-4 font-semibold text-white">{user.email}</td>
                       <td className="px-6 py-4 space-y-1">
                         <div className="flex gap-1.5 flex-wrap">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                             {user.subscription_status}
                           </span>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'premium' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'plus' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
                             {user.tier}
                           </span>
+                          {isManualUpgrade && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                              Manual
+                            </span>
+                          )}
                         </div>
                         {user.tier === 'trial' && user.trial_ends_at && (
                           <p className="text-[10px] text-slate-500 font-mono">
@@ -203,11 +210,11 @@ const UserManagement = () => {
                           )}
                         </button>
                         <button
-                          onClick={() => handleToggleTier(user.id, user.tier === 'premium' ? 'trial' : 'premium')}
+                          onClick={() => handleToggleTier(user.id, user.tier === 'plus' ? 'trial' : 'plus')}
                           disabled={actionId === user.id}
-                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'premium' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
+                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'plus' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
                         >
-                          {user.tier === 'premium' ? 'Downgrade to Trial' : 'Upgrade to Premium'}
+                          {user.tier === 'plus' ? 'Downgrade to Trial' : 'Upgrade to Plus'}
                         </button>
                       </td>
                     </tr>

@@ -173,7 +173,7 @@ async function sendSubscriptionActivatedEmail(userEmail, planName) {
 async function sendSubscriptionCancelledEmail(userEmail) {
     const html = baseTemplate('Subscription Cancelled', `
       <p style="color:#94a3b8;line-height:1.7;margin:0 0 20px;">
-        Your ${APP_NAME} subscription has been cancelled or disabled. You will lose access to premium features at the end of your billing period.
+        Your ${APP_NAME} subscription has been cancelled or disabled. You will lose access to Plus features at the end of your billing period.
       </p>
       <p style="color:#94a3b8;line-height:1.7;margin:0 0 24px;">
         If you believe this was a mistake, or if you'd like to reactivate your subscription, please visit the billing section of your dashboard.

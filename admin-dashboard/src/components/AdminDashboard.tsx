@@ -66,8 +66,8 @@ const AdminDashboard = ({ setActiveTab }: any) => {
     }
   };
 
-  const handleToggleTier = async (userId: number, currentTier: 'trial' | 'premium') => {
-    const newTier = currentTier === 'premium' ? 'trial' : 'premium';
+  const handleToggleTier = async (userId: number, currentTier: 'trial' | 'plus') => {
+    const newTier = currentTier === 'plus' ? 'trial' : 'plus';
     setActionUserId(userId);
     try {
       await axios.post(`/api/admin/users/${userId}/tier`, { tier: newTier });
@@ -130,7 +130,7 @@ const AdminDashboard = ({ setActiveTab }: any) => {
           value={overview.totalUsers || 0}
           icon={Users}
           color="bg-primary"
-          subtext={`${overview.premiumUsers || 0} Premium • ${overview.trialUsers || 0} Trial`}
+          subtext={`${overview.plusUsers || 0} Plus • ${overview.trialUsers || 0} Trial`}
         />
         <StatCard
           title="Active Subscriptions"
@@ -221,11 +221,16 @@ const AdminDashboard = ({ setActiveTab }: any) => {
                       onClick={() => handleToggleTier(u.id, u.tier)}
                       disabled={actionUserId === u.id}
                       className={`text-[9px] font-bold px-2 py-0.5 rounded cursor-pointer transition-all uppercase ${
-                        u.tier === 'premium' ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'
+                        u.tier === 'plus' ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'
                       }`}
                     >
                       {u.tier}
                     </button>
+                    {u.tier === 'plus' && !u.paystack_subscription_code && (
+                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase tracking-wider">
+                        Manual
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs text-slate-500">
                     Joined {new Date(u.created_at).toLocaleDateString()}

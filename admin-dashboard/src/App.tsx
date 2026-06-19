@@ -243,7 +243,7 @@ function App() {
                   })()}
                 </p>
               ) : (
-                <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Premium Member</p>
+                <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Plus Member</p>
               )}
             </div>
           </div>

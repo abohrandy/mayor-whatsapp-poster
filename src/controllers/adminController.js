@@ -59,12 +59,11 @@ const adminController = {
             res.status(500).json({ error: 'Failed to override user subscription' });
         }
     },
-
     async updateUserTier(req, res) {
         try {
             const { id } = req.params;
-            const { tier } = req.body; // 'trial' or 'premium'
-            if (!['trial', 'premium'].includes(tier)) {
+            const { tier } = req.body; // 'trial' or 'plus'
+            if (!['trial', 'plus'].includes(tier)) {
                 return res.status(400).json({ error: 'Invalid tier selection' });
             }
 
@@ -74,7 +73,7 @@ const adminController = {
                 return res.status(404).json({ error: 'User not found' });
             }
 
-            // If switching to premium, reset trial_ends_at to NULL, otherwise if trial, set it to now + 14 days
+            // If switching to plus, reset trial_ends_at to NULL, otherwise if trial, set it to now + 14 days
             let trialEndsAt = null;
             if (tier === 'trial') {
                 const ends = new Date();
@@ -109,7 +108,7 @@ const adminController = {
             const totalUsers = await db.get('SELECT COUNT(*) as count FROM users');
             const activeSubs = await db.get("SELECT COUNT(*) as count FROM users WHERE subscription_status = 'active'");
             const trialUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier = 'trial'");
-            const premiumUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier = 'premium'");
+            const plusUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier = 'plus'");
             const totalSessions = await db.get('SELECT COUNT(*) as count FROM whatsapp_sessions');
             const totalAnnouncements = await db.get('SELECT COUNT(*) as count FROM announcements');
             const totalProfiles = await db.get('SELECT COUNT(*) as count FROM posting_profiles');
@@ -148,7 +147,7 @@ const adminController = {
                     totalUsers: totalUsers.count,
                     activeSubscriptions: activeSubs.count,
                     trialUsers: trialUsers.count,
-                    premiumUsers: premiumUsers.count,
+                    plusUsers: plusUsers.count,
                     totalSessions: totalSessions.count,
                     totalAnnouncements: totalAnnouncements.count,
                     totalProfiles: totalProfiles.count

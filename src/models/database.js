@@ -90,13 +90,17 @@ async function initDb() {
         );
         await db.run(
             `INSERT INTO subscription_plans (name, slug, price, duration_days, max_groups, max_sessions, spam_interval_hours, is_trial, is_active)
-             VALUES ('Premium Plan', 'premium', 500000, 30, 25, 999, 6, 0, 1)`
+             VALUES ('Plus Plan', 'plus', 500000, 30, 25, 999, 6, 0, 1)`
         );
         console.log('Seeded default subscription plans.');
     }
 
+    // Migrate premium plan to plus plan if database was already initialized
+    await db.run("UPDATE subscription_plans SET name = 'Plus Plan', slug = 'plus' WHERE slug = 'premium'");
+    await db.run("UPDATE users SET tier = 'plus' WHERE tier = 'premium'");
+
     // Ensure existing database migrations/updates are applied to default plans
-    await db.run("UPDATE subscription_plans SET max_groups = 25 WHERE slug = 'premium' AND max_groups > 25");
+    await db.run("UPDATE subscription_plans SET max_groups = 25 WHERE slug = 'plus' AND max_groups > 25");
 
     // WhatsApp Sessions table
     await db.exec(`

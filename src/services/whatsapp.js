@@ -92,6 +92,16 @@ class WhatsAppClient {
                     }
                 }
             }
+
+            // Clean up orphaned temp sessions from database (e.g. abandoned QR requests)
+            const dbTempSessions = await db.all("SELECT session_id FROM whatsapp_sessions WHERE session_id LIKE 'temp_%'");
+            for (const tempDbSess of dbTempSessions) {
+                const stillExists = this.sessions.some(s => s.id === tempDbSess.session_id);
+                if (!stillExists) {
+                    console.log(`[Proxy] Cleaning up orphaned temp session from database: ${tempDbSess.session_id}`);
+                    await db.run('DELETE FROM whatsapp_sessions WHERE session_id = ?', [tempDbSess.session_id]);
+                }
+            }
         } catch (err) {
             console.error('[Proxy] Failed to contact Go Bridge:', err.message);
             // Don't completely overwrite sessions with empty, but mark bridge as offline

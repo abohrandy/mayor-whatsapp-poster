@@ -56,10 +56,10 @@ function requireSubscription(req, res, next) {
         if (req.user.trial_ends_at) {
             const endsAt = new Date(req.user.trial_ends_at);
             if (endsAt < new Date()) {
-                return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a premium plan to proceed.' });
+                return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a Plus plan to proceed.' });
             }
         } else {
-            return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a premium plan to proceed.' });
+            return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a Plus plan to proceed.' });
         }
     }
 
