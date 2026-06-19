@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X, Package } from 'lucide-react';
 import axios from 'axios';
 import Dashboard from './components/Dashboard';
+import AdminDashboard from './components/AdminDashboard';
 import Announcements from './components/Announcements';
 import WhatsAppStatus from './components/WhatsAppStatus';
 import Settings from './components/Settings';
@@ -85,15 +86,18 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return (
-        <Dashboard
-          setActiveTab={setActiveTab}
-          triggerNewAnnouncement={() => {
-            setActiveTab('announcements');
-            setOpenNewAnnouncementModal(true);
-          }}
-        />
-      );
+      case 'dashboard':
+        return user?.is_admin ? (
+          <AdminDashboard setActiveTab={setActiveTab} />
+        ) : (
+          <Dashboard
+            setActiveTab={setActiveTab}
+            triggerNewAnnouncement={() => {
+              setActiveTab('announcements');
+              setOpenNewAnnouncementModal(true);
+            }}
+          />
+        );
       case 'announcements': return (
         <Announcements
           openNewModalOnMount={openNewAnnouncementModal}
@@ -106,7 +110,12 @@ function App() {
       case 'settings': return <Settings />;
       case 'users': return <UserManagement />;
       case 'plans': return <PlanManagement />;
-      default: return <Dashboard setActiveTab={setActiveTab} />;
+      default:
+        return user?.is_admin ? (
+          <AdminDashboard setActiveTab={setActiveTab} />
+        ) : (
+          <Dashboard setActiveTab={setActiveTab} />
+        );
     }
   };
 
