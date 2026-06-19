@@ -1,6 +1,16 @@
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendInstance = null;
+
+function getResendInstance() {
+    if (!resendInstance) {
+        if (!process.env.RESEND_API_KEY) {
+            return null;
+        }
+        resendInstance = new Resend(process.env.RESEND_API_KEY);
+    }
+    return resendInstance;
+}
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Mayor WhatsApp Poster <noreply@mayorposter.com>';
 const APP_NAME = 'Mayor WhatsApp Poster';
@@ -60,7 +70,8 @@ function badge(text, color = '#6366f1') {
 }
 
 async function send({ to, subject, html }) {
-    if (!process.env.RESEND_API_KEY) {
+    const resend = getResendInstance();
+    if (!resend) {
         console.warn('[Email] RESEND_API_KEY not configured — skipping email send.');
         return;
     }
