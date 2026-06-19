@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const { getDb, logActivity } = require('../models/database');
+const { sendSubscriptionActivatedEmail, sendSubscriptionCancelledEmail, sendWelcomeEmail } = require('../services/email');
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_PLAN_CODE = process.env.PAYSTACK_PLAN_CODE || ''; // e.g., PLN_xxxxxxxx
@@ -126,6 +127,11 @@ const paymentController = {
                     );
                     await logActivity('subscription_activated', `Subscription upgraded to ${planSlug} via Paystack webhook`, user.id);
                     console.log(`[Paystack] Upgraded & activated subscription for ${customerEmail} to ${planSlug}`);
+
+                    // Email the user their subscription confirmation
+                    const plan = await db.get('SELECT name FROM subscription_plans WHERE slug = ?', [planSlug]);
+                    sendSubscriptionActivatedEmail(customerEmail, plan?.name || planSlug)
+                        .catch(err => console.error('[Payment] Subscription email error:', err));
                     break;
 
                 case 'subscription.disable':
@@ -136,6 +142,10 @@ const paymentController = {
                     );
                     await logActivity('subscription_disabled', `Subscription disabled/cancelled via Paystack webhook`, user.id);
                     console.log(`[Paystack] Disabled subscription for ${customerEmail}`);
+
+                    // Email the user that their subscription was cancelled
+                    sendSubscriptionCancelledEmail(customerEmail)
+                        .catch(err => console.error('[Payment] Cancellation email error:', err));
                     break;
 
                 default:

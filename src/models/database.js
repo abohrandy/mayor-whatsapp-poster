@@ -291,7 +291,7 @@ async function logActivity(action_type, description, user_id = null) {
             [action_type, description, user_id]
         );
         const { emitStats } = require('../services/socket');
-        emitStats({ action: 'new_log' });
+        emitStats(user_id, { action: 'new_log' });
     } catch (e) {
         console.error('Failed to log activity:', e);
     }

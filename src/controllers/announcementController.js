@@ -119,7 +119,7 @@ const announcementController = {
                 ]
             );
 
-            emitStats({ action: 'create' });
+            emitStats(req.user.id, { action: 'create' });
             await logActivity('announcement_added', `Added announcement: "${title}"`, req.user.id);
             res.status(201).json({ message: 'Announcement created successfully', id: result.lastID });
         } catch (error) {
@@ -209,7 +209,7 @@ const announcementController = {
                 ]
             );
 
-            emitStats({ action: 'update' });
+            emitStats(req.user.id, { action: 'update' });
             await logActivity('announcement_updated', `Updated announcement: "${title}"`, req.user.id);
             res.json({ message: 'Announcement updated successfully.' });
         } catch (error) {
@@ -247,7 +247,7 @@ const announcementController = {
             }
 
             await db.run('DELETE FROM announcements WHERE id = ? AND user_id = ?', [id, req.user.id]);
-            emitStats({ action: 'delete' });
+            emitStats(req.user.id, { action: 'delete' });
             await logActivity('announcement_deleted', `Deleted announcement: "${ann.title}"`, req.user.id);
             res.json({ message: 'Announcement deleted.' });
         } catch (error) {

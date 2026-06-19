@@ -3,7 +3,11 @@ import { Calendar, Wifi, ArrowUpRight, FileText, Send, RefreshCw } from 'lucide-
 import { io } from 'socket.io-client';
 import axios from 'axios';
 
-const socket = io();
+const socket = io({
+    auth: {
+        token: localStorage.getItem('token')
+    }
+});
 
 const StatCard = ({ title, value, icon: Icon, color, secondary }: any) => (
     <div className="glass-card p-6 flex items-start justify-between">

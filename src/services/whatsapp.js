@@ -1,6 +1,7 @@
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const { sendWhatsAppConnectedEmail } = require('./email');
 
 console.log('--- WHATSAPP SERVICE PROXY LOADED (GO BRIDGE - MULTI SESSION) at ' + new Date().toLocaleTimeString() + ' ---');
 
@@ -51,11 +52,28 @@ class WhatsAppClient {
             for (const newSess of this.sessions) {
                 const oldSess = oldSessions.find(s => s.id === newSess.id);
                 if (newSess.status === 'CONNECTED' && (!oldSess || oldSess.status !== 'CONNECTED')) {
-                    emitLog({ 
+                    const mapping = await db.get('SELECT user_id FROM whatsapp_sessions WHERE session_id = ?', [newSess.id]);
+                    const userId = mapping ? mapping.user_id : null;
+                    
+                    emitLog(userId, { 
                         type: 'success', 
                         message: `WhatsApp session linked: ${newSess.jid?.user || newSess.id}`, 
                         timestamp: new Date().toISOString() 
                     });
+
+                    // Send security notification email to the session owner
+                    if (userId) {
+                        try {
+                            const userRow = await db.get('SELECT email FROM users WHERE id = ?', [userId]);
+                            if (userRow) {
+                                const phoneNumber = newSess.jid?.user || null;
+                                sendWhatsAppConnectedEmail(userRow.email, phoneNumber)
+                                    .catch(err => console.error('[WhatsApp] Connected email error:', err));
+                            }
+                        } catch (err) {
+                            console.error('[WhatsApp] Failed to send connected email:', err);
+                        }
+                    }
 
                     // Promotion check: if this session is newly CONNECTED with JID,
                     // check if there is an unmapped session matching it, and check if a temp session disappeared.

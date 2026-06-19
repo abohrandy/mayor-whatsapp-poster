@@ -3,6 +3,7 @@ const path = require('path');
 const { getDb, logActivity } = require('../models/database');
 const waClient = require('./whatsapp');
 const { emitLog } = require('./socket');
+const { sendAnnouncementPostedEmail } = require('./email');
 
 /**
  * Schedule the announcement checker to run every 3 hours.
@@ -80,7 +81,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     if (targetGroups.length === 0) {
         const msg = `[Scheduler] Announcement "${ann.title}" has no target groups configured. Skipping.`;
         console.warn(msg);
-        emitLog({ type: 'warning', message: msg, timestamp: new Date().toISOString() });
+        emitLog(ann.user_id, { type: 'warning', message: msg, timestamp: new Date().toISOString() });
         return;
     }
 
@@ -104,7 +105,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     if (!spamCheck.allowed) {
         const errMsg = `[Anti-Spam] Blocked announcement "${ann.title}": ${spamCheck.message}`;
         console.warn(errMsg);
-        emitLog({ type: 'error', message: errMsg, timestamp: new Date().toISOString() });
+        emitLog(ann.user_id, { type: 'error', message: errMsg, timestamp: new Date().toISOString() });
         await logActivity('announcement_error', errMsg, ann.user_id);
         
         // If it's a scheduled recurring post, advance it to avoid getting stuck, or mark inactive if one-time
@@ -185,7 +186,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     for (const groupId of targetGroups) {
         const groupName = groupMap[groupId] || groupId;
         try {
-            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, ann.sender_jid);
+            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, ann.sender_jid, ann.user_id);
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });
@@ -201,8 +202,21 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
 
     const logMsg = `Announcement "${ann.title}" sent to ${succeeded}/${targetGroups.length} group(s)${failed > 0 ? ` (${failed} failed)` : ''}.`;
     console.log('[Scheduler]', logMsg);
-    emitLog({ type: failed > 0 ? 'warning' : 'success', message: logMsg, timestamp: new Date().toISOString() });
+    emitLog(ann.user_id, { type: failed > 0 ? 'warning' : 'success', message: logMsg, timestamp: new Date().toISOString() });
     await logActivity('announcement_posted', logMsg, ann.user_id);
+
+    // Send email notification to user
+    if (ann.user_id) {
+        try {
+            const userRow = await db.get('SELECT email FROM users WHERE id = ?', [ann.user_id]);
+            if (userRow && userRow.email) {
+                sendAnnouncementPostedEmail(userRow.email, ann.title, targetGroups.length, failed)
+                    .catch(err => console.error('[Scheduler] Announcement email error:', err));
+            }
+        } catch (err) {
+            console.error('[Scheduler] Failed to send announcement email:', err);
+        }
+    }
 
     if (succeeded > 0) {
         const { logPostContent } = require('./antiSpam');
@@ -269,13 +283,13 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
 /**
  * Send to group with retry support and exponential backoff on rate limiting (error 420).
  */
-async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2, from = null) {
+async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2, from = null, userId = null) {
     let attempt = 0;
     let delay = 3000; // start with 3 seconds retry delay on error
     const groupName = groupMap[groupId] || groupId;
     while (attempt < maxRetries) {
         try {
-            await sendToGroup(groupId, mediaEntry, caption, from);
+            await sendToGroup(groupId, mediaEntry, caption, from, userId);
             return; // success!
         } catch (err) {
             attempt++;
@@ -302,7 +316,7 @@ async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {},
 /**
  * Send a media file (or text-only) to a single WhatsApp group.
  */
-async function sendToGroup(groupId, mediaEntry, caption, from = null) {
+async function sendToGroup(groupId, mediaEntry, caption, from = null, userId = null) {
     try {
         if (mediaEntry && mediaEntry.path) {
             await waClient.sendMedia(groupId, mediaEntry.path, caption, mediaEntry.type || 'image', from);
@@ -313,7 +327,7 @@ async function sendToGroup(groupId, mediaEntry, caption, from = null) {
     } catch (err) {
         const msg = `Failed to send to ${groupId} via ${from || 'default'}: ${err.message}`;
         console.error('[Scheduler]', msg);
-        emitLog({ type: 'error', message: msg, timestamp: new Date().toISOString() });
+        emitLog(userId, { type: 'error', message: msg, timestamp: new Date().toISOString() });
         throw err;
     }
 }

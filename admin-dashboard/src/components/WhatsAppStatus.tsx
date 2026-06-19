@@ -4,7 +4,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-const socket = io();
+const socket = io({
+    auth: {
+        token: localStorage.getItem('token')
+    }
+});
 
 interface WhatsAppSession {
     id: string;

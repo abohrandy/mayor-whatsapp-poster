@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getDb, logActivity } = require('../models/database');
+const { sendWelcomeEmail, sendNewUserAdminAlert } = require('../services/email');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-whatsapp-saas-2026';
 
@@ -31,6 +32,10 @@ const authController = {
             const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
 
             await logActivity('user_signup', `User signed up: ${email}`, userId);
+
+            // Send welcome email to user and alert to admin (fire-and-forget)
+            sendWelcomeEmail(email, trialEndsAt.toISOString()).catch(err => console.error('[Auth] Welcome email error:', err));
+            sendNewUserAdminAlert(email, userId).catch(err => console.error('[Auth] Admin alert email error:', err));
 
             res.status(201).json({
                 message: 'Registration successful',
