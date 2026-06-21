@@ -161,18 +161,41 @@ router.post('/whatsapp/send-test', requireAuth, requireSubscription, async (req,
 router.get('/whatsapp/chats', requireAuth, requireSubscription, async (req, res) => {
     try {
         const { from } = req.query;
+        const db = await require('../models/database').getDb();
         
-        // Security check: Verify session belongs to the user
+        // Get this user's mapped sessions
+        const mappings = await db.all('SELECT session_id FROM whatsapp_sessions WHERE user_id = ?', [req.user.id]);
+        const allowedSessionIds = mappings.map(m => m.session_id);
+
         if (from) {
-            const db = await require('../models/database').getDb();
-            const mapping = await db.get('SELECT id FROM whatsapp_sessions WHERE user_id = ? AND session_id = ?', [req.user.id, from]);
-            if (!mapping) {
+            // Security check: Verify session belongs to the user
+            if (!allowedSessionIds.includes(from)) {
                 return res.status(403).json({ error: 'Unauthorized to view chats for this WhatsApp session' });
             }
-        }
+            const chats = await waClient.getChats(from);
+            res.json(chats);
+        } else {
+            // If no specific session is requested, fetch and merge chats across ALL sessions owned by this user
+            let combinedChats = [];
+            const seenChatIds = new Set();
 
-        const chats = await waClient.getChats(from);
-        res.json(chats);
+            for (const sessId of allowedSessionIds) {
+                try {
+                    const chats = await waClient.getChats(sessId);
+                    if (Array.isArray(chats)) {
+                        for (const chat of chats) {
+                            if (chat && chat.id && !seenChatIds.has(chat.id)) {
+                                seenChatIds.add(chat.id);
+                                combinedChats.push(chat);
+                            }
+                        }
+                    }
+                } catch (sessErr) {
+                    console.error(`[Chats API] Failed to fetch chats for session ${sessId}:`, sessErr.message);
+                }
+            }
+            res.json(combinedChats);
+        }
     } catch (error) {
         console.error('Error getting chats:', error);
         res.status(500).json({ error: error.message });
