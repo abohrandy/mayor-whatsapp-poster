@@ -274,6 +274,20 @@ async function initDb() {
         console.error('Failed to run historical orphan user adoption migration:', err);
     }
 
+    // Ensure the super admin account is always upgraded to the Plus tier and active
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+        try {
+            await db.run(
+                "UPDATE users SET tier = 'plus', subscription_status = 'active' WHERE email = ?",
+                [adminEmail]
+            );
+            console.log(`[Database] Ensured admin account (${adminEmail}) is active on Plus tier.`);
+        } catch (err) {
+            console.error('[Database] Failed to upgrade admin account tier:', err);
+        }
+    }
+
     console.log('Database initialized successfully.');
     return db;
 }
