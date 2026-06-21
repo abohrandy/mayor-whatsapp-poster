@@ -10,9 +10,9 @@ const { sendAnnouncementPostedEmail } = require('./email');
  * Also runs once on startup to catch any missed posts.
  */
 async function scheduleAnnouncementChecker() {
-    // Run every minute
-    cron.schedule('* * * * *', async () => {
-        console.log('[Scheduler] Running 1-minute announcement check...');
+    // Run every 30 minutes
+    cron.schedule('*/30 * * * *', async () => {
+        console.log('[Scheduler] Running 30-minute announcement check...');
         await checkAndSendDue();
     }, { timezone: await getTimezone() });
 
@@ -22,7 +22,7 @@ async function scheduleAnnouncementChecker() {
         await checkAndSendDue();
     }, 30000); // 30-second delay on startup
 
-    console.log('[Scheduler] Announcement checker initialized (every minute).');
+    console.log('[Scheduler] Announcement checker initialized (every 30 minutes).');
 }
 
 async function getTimezone() {
