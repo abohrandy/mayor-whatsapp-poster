@@ -10,9 +10,9 @@ const { sendAnnouncementPostedEmail } = require('./email');
  * Also runs once on startup to catch any missed posts.
  */
 async function scheduleAnnouncementChecker() {
-    // Run every 3 hours
-    cron.schedule('0 */3 * * *', async () => {
-        console.log('[Scheduler] Running 3-hour announcement check...');
+    // Run every minute
+    cron.schedule('* * * * *', async () => {
+        console.log('[Scheduler] Running 1-minute announcement check...');
         await checkAndSendDue();
     }, { timezone: await getTimezone() });
 
@@ -22,7 +22,7 @@ async function scheduleAnnouncementChecker() {
         await checkAndSendDue();
     }, 30000); // 30-second delay on startup
 
-    console.log('[Scheduler] Announcement checker initialized (every 3 hours).');
+    console.log('[Scheduler] Announcement checker initialized (every minute).');
 }
 
 async function getTimezone() {
@@ -71,6 +71,34 @@ async function checkAndSendDue() {
  */
 async function sendAnnouncement(ann, advanceRibbon = false) {
     const db = await getDb();
+
+    // Resolve sender WhatsApp session owned by this user
+    let senderJid = ann.sender_jid;
+    if (!senderJid) {
+        try {
+            const userSession = await db.get(
+                "SELECT session_id FROM whatsapp_sessions WHERE user_id = ?",
+                [ann.user_id]
+            );
+            if (userSession) {
+                senderJid = userSession.session_id;
+                console.log(`[Scheduler] Resolved empty sender_jid for announcement "${ann.title}" (user ${ann.user_id}) to: ${senderJid}`);
+            }
+        } catch (sessErr) {
+            console.error('[Scheduler] Failed to resolve user session JID:', sessErr);
+        }
+    }
+
+    if (!senderJid) {
+        const msg = `[Scheduler] Announcement "${ann.title}" has no linked sender WhatsApp account. Skipping.`;
+        console.warn(msg);
+        emitLog(ann.user_id, { type: 'error', message: msg, timestamp: new Date().toISOString() });
+        await logActivity('announcement_error', msg, ann.user_id);
+        
+        // Disable announcement so it does not loop infinitely
+        await db.run(`UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`, [ann.id]);
+        return;
+    }
 
     let mediaFiles = [];
     try { mediaFiles = JSON.parse(ann.media_files || '[]'); } catch { mediaFiles = []; }
@@ -169,7 +197,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     // Fetch group details to map JID to Name
     let groupMap = {};
     try {
-        const chats = await waClient.getChats(ann.sender_jid);
+        const chats = await waClient.getChats(senderJid);
         if (Array.isArray(chats)) {
             chats.forEach(chat => {
                 if (chat.id) {
@@ -186,7 +214,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     for (const groupId of targetGroups) {
         const groupName = groupMap[groupId] || groupId;
         try {
-            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, ann.sender_jid, ann.user_id);
+            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, senderJid, ann.user_id);
             sendResults.push({ status: 'fulfilled' });
         } catch (err) {
             sendResults.push({ status: 'rejected', reason: err });

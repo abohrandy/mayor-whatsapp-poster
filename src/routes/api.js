@@ -140,16 +140,25 @@ router.post('/whatsapp/send-test', requireAuth, requireSubscription, async (req,
             return res.status(400).json({ error: 'No group ID provided for test. Pass { groupId } in body.' });
         }
 
-        // Security check: Verify session belongs to the user
+        const db = await require('../models/database').getDb();
+        const mappings = await db.all('SELECT session_id FROM whatsapp_sessions WHERE user_id = ?', [req.user.id]);
+        const allowedSessionIds = mappings.map(m => m.session_id);
+
+        let senderJid = from;
         if (from) {
-            const db = await require('../models/database').getDb();
-            const mapping = await db.get('SELECT id FROM whatsapp_sessions WHERE user_id = ? AND session_id = ?', [req.user.id, from]);
-            if (!mapping) {
+            // Security check: Verify session belongs to the user
+            if (!allowedSessionIds.includes(from)) {
                 return res.status(403).json({ error: 'Unauthorized to use this WhatsApp session' });
             }
+        } else {
+            // Fallback to the user's first connected session
+            if (allowedSessionIds.length === 0) {
+                return res.status(400).json({ error: 'No connected WhatsApp sessions found. Please link a WhatsApp account first.' });
+            }
+            senderJid = allowedSessionIds[0];
         }
 
-        await waClient.sendTextMessage(targetId, '✅ *Mayor WhatsApp Poster*: Test connection successful!', from);
+        await waClient.sendTextMessage(targetId, '✅ *Mayor WhatsApp Poster*: Test connection successful!', senderJid);
         res.json({ message: 'Test message sent successfully' });
     } catch (error) {
         console.error('Error sending test message:', error);
