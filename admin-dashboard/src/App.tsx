@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X, Package } from 'lucide-react';
+import { LayoutDashboard, Megaphone, MessageSquare, Settings as SettingsIcon, Bell, User, Users, History, LogOut, ShieldCheck, Sun, Moon, Menu, X, Package, HelpCircle } from 'lucide-react';
 import axios from 'axios';
 import Dashboard from './components/Dashboard';
 import AdminDashboard from './components/AdminDashboard';
@@ -13,6 +13,7 @@ import Signup from './components/Signup';
 import Subscription from './components/Subscription';
 import UserManagement from './components/UserManagement';
 import PlanManagement from './components/PlanManagement';
+import UserGuide from './components/UserGuide';
 import { useNotifications } from './hooks/useNotifications';
 
 // Setup global axios headers interceptor
@@ -110,6 +111,7 @@ function App() {
       case 'settings': return <Settings />;
       case 'users': return <UserManagement />;
       case 'plans': return <PlanManagement />;
+      case 'guide': return <UserGuide />;
       default:
         return user?.is_admin ? (
           <AdminDashboard setActiveTab={setActiveTab} />
@@ -126,6 +128,7 @@ function App() {
     { id: 'activity', label: 'Activity Logs', Icon: History },
     { id: 'whatsapp', label: 'WhatsApp Status', Icon: MessageSquare },
     { id: 'settings', label: 'Settings', Icon: SettingsIcon },
+    { id: 'guide', label: 'User Guide', Icon: HelpCircle },
   ];
 
   if (user && user.is_admin) {
@@ -142,6 +145,7 @@ function App() {
     settings: 'Settings',
     users: 'User Management',
     plans: 'Subscription Plans',
+    guide: 'User Guide',
   };
 
   // 1. Loading state
