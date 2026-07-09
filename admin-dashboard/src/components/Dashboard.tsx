@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Wifi, ArrowUpRight, FileText, Send, RefreshCw } from 'lucide-react';
+import { Calendar, Wifi, ArrowUpRight, FileText, Send, RefreshCw, HelpCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 
@@ -90,6 +90,25 @@ const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
 
     return (
         <div className="space-y-8">
+            {/* User Guide Banner */}
+            <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+                        <HelpCircle size={20} />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-white text-sm">First time here?</h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">Read our step-by-step tutorial to link your phone and post announcements safely.</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => setActiveTab('guide')}
+                    className="shrink-0 text-xs font-black text-indigo-400 hover:text-white uppercase tracking-wider bg-indigo-500/10 hover:bg-indigo-500/30 border border-indigo-500/30 px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1"
+                >
+                    Open User Guide →
+                </button>
+            </div>
+
             {/* Quick Actions Panel */}
             <div className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
