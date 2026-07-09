@@ -87,6 +87,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [groupSearchTerm, setGroupSearchTerm] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -223,6 +224,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     setNewFiles([]);
     setExistingMedia([]);
     setForm(defaultForm);
+    setGroupSearchTerm('');
   };
 
   const handleFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -951,6 +953,20 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   </div>
                 )}
 
+                {/* Groups Search Input */}
+                {!groupsLoading && groups.length > 0 && (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                    <input
+                      type="text"
+                      placeholder="Search groups by name..."
+                      value={groupSearchTerm}
+                      onChange={(e) => setGroupSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 placeholder-slate-600 transition-colors"
+                    />
+                  </div>
+                )}
+
                 {groupsLoading && <p className="text-xs text-slate-500">Loading groups...</p>}
 
                 {!groupsLoading && groups.length === 0 && (
@@ -975,18 +991,20 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                 )}
 
                 <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
-                  {groups.map(g => (
-                    <label key={g.id}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_groups.includes(g.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
-                      <input type="checkbox"
-                        className="accent-indigo-500"
-                        checked={form.target_groups.includes(g.id)}
-                        onChange={() => toggleGroup(g.id)}
-                      />
-                      <span className="text-sm text-white">{g.name}</span>
-                      {g.isGroup && <span className="ml-auto text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">group</span>}
-                    </label>
-                  ))}
+                  {groups
+                    .filter(g => g.name.toLowerCase().includes(groupSearchTerm.toLowerCase()))
+                    .map(g => (
+                      <label key={g.id}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_groups.includes(g.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                        <input type="checkbox"
+                          className="accent-indigo-500"
+                          checked={form.target_groups.includes(g.id)}
+                          onChange={() => toggleGroup(g.id)}
+                        />
+                        <span className="text-sm text-white">{g.name}</span>
+                        {g.isGroup && <span className="ml-auto text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">group</span>}
+                      </label>
+                    ))}
                 </div>
               </div>
 
