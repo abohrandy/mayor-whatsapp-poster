@@ -16,6 +16,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"database/sql"
 
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
@@ -58,6 +59,23 @@ func main() {
 
 	log.Printf("[Bridge] Starting Multi-Session Whatsmeow HTTP Bridge on port %s...", port)
 	log.Printf("[Bridge] Using session database: %s", dbPath)
+
+	// Optimize SQLite database before Whatsmeow starts
+	log.Printf("[Bridge] Optimizing and vacuuming session database...")
+	if sqldb, err := sql.Open("sqlite3", dbPath); err == nil {
+		if _, err := sqldb.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+			log.Printf("[Bridge] DB warning: Failed to set journal_mode: %v", err)
+		}
+		_, _ = sqldb.Exec("PRAGMA synchronous=NORMAL;")
+		_, _ = sqldb.Exec("PRAGMA auto_vacuum=FULL;")
+		if _, err := sqldb.Exec("VACUUM;"); err != nil {
+			log.Printf("[Bridge] DB warning: Failed to vacuum database: %v", err)
+		}
+		sqldb.Close()
+		log.Printf("[Bridge] Session database optimized.")
+	} else {
+		log.Printf("[Bridge] Warning: Failed to open DB directly for optimization: %v", err)
+	}
 
 	// Initialize database Container
 	container, err := sqlstore.New(context.Background(), "sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", dbPath), waLog.Stdout("Database", "WARN", true))
