@@ -54,8 +54,8 @@ async function start() {
         await waClient.init();
         await scheduleAnnouncementChecker();
 
-        server.listen(PORT, () => {
-            console.log(`Mayor WhatsApp Poster running on http://localhost:${PORT}`);
+        server.listen(PORT, '0.0.0.0', () => {
+            console.log(`Mayor WhatsApp Poster running on http://0.0.0.0:${PORT}`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);
