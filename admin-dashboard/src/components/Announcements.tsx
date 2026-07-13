@@ -772,7 +772,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
 
                 {/* One-time: date+time */}
                 {!form.is_recurring && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-slate-400">Schedule Date &amp; Time</label>
                       <input type="datetime-local"
@@ -783,38 +783,38 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                     </div>
                   </div>
                 )}
-
-                {/* Recurring: Options */}
-                {form.is_recurring && (
-                  <div className="space-y-4 bg-slate-900/30 p-4 border border-slate-800 rounded-xl">
-                    <div className="flex gap-2 p-1 bg-slate-800/80 rounded-lg border border-slate-700/50">
-                      <button
-                        type="button"
-                        onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [] }))}
-                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                          !(form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0)
-                            ? 'bg-primary text-white'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        Repeat by Interval
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [1] }))}
-                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                          form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0
-                            ? 'bg-primary text-white'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        Repeat by Days of Week
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Left side: recurrence rule */}
-                      <div>
+ 
+                 {/* Recurring: Options */}
+                 {form.is_recurring && (
+                   <div className="space-y-4 bg-slate-900/30 p-4 border border-slate-800 rounded-xl">
+                     <div className="flex gap-2 p-1 bg-slate-800/80 rounded-lg border border-slate-700/50">
+                       <button
+                         type="button"
+                         onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [] }))}
+                         className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                           !(form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0)
+                             ? 'bg-primary text-white'
+                             : 'text-slate-400 hover:text-slate-200'
+                         }`}
+                       >
+                         Repeat by Interval
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => setForm(prev => ({ ...prev, recurrence_days_of_week: [1] }))}
+                         className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                           form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0
+                             ? 'bg-primary text-white'
+                             : 'text-slate-400 hover:text-slate-200'
+                         }`}
+                       >
+                         Repeat by Days of Week
+                       </button>
+                     </div>
+ 
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       {/* Left side: recurrence rule */}
+                       <div>
                         {form.recurrence_days_of_week && form.recurrence_days_of_week.length > 0 ? (
                           <div className="space-y-2">
                             <label className="text-xs font-medium text-slate-400">Select Days</label>

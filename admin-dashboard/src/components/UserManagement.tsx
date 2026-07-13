@@ -142,86 +142,88 @@ const UserManagement = () => {
               No registered SaaS users found.
             </div>
           ) : (
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
-                  <th className="px-6 py-4">User ID</th>
-                  <th className="px-6 py-4">Email Address</th>
-                  <th className="px-6 py-4">Plan Details</th>
-                  <th className="px-6 py-4">Usage Metrics</th>
-                  <th className="px-6 py-4">Signup Date</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300 text-xs">
-                {filteredUsers.map(user => {
-                  const isActive = user.subscription_status === 'active';
-                  const isManualUpgrade = user.tier === 'plus' && !user.paystack_subscription_code;
-                  return (
-                    <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
-                       <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
-                      <td className="px-6 py-4 font-semibold text-white">{user.email}</td>
-                      <td className="px-6 py-4 space-y-1">
-                        <div className="flex gap-1.5 flex-wrap">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                            {user.subscription_status}
-                          </span>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'plus' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
-                            {user.tier}
-                          </span>
-                          {isManualUpgrade && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                              Manual
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                    <th className="px-6 py-4">User ID</th>
+                    <th className="px-6 py-4">Email Address</th>
+                    <th className="px-6 py-4">Plan Details</th>
+                    <th className="px-6 py-4">Usage Metrics</th>
+                    <th className="px-6 py-4">Signup Date</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300 text-xs">
+                  {filteredUsers.map(user => {
+                    const isActive = user.subscription_status === 'active';
+                    const isManualUpgrade = user.tier === 'plus' && !user.paystack_subscription_code;
+                    return (
+                      <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
+                         <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
+                        <td className="px-6 py-4 font-semibold text-white">{user.email}</td>
+                        <td className="px-6 py-4 space-y-1">
+                          <div className="flex gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                              {user.subscription_status}
                             </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'plus' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
+                              {user.tier}
+                            </span>
+                            {isManualUpgrade && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                                Manual
+                              </span>
+                            )}
+                          </div>
+                          {user.tier === 'trial' && user.trial_ends_at && (
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              Ends: {new Date(user.trial_ends_at).toLocaleDateString('en-GB')}
+                            </p>
                           )}
-                        </div>
-                        {user.tier === 'trial' && user.trial_ends_at && (
-                          <p className="text-[10px] text-slate-500 font-mono">
-                            Ends: {new Date(user.trial_ends_at).toLocaleDateString('en-GB')}
+                        </td>
+                        <td className="px-6 py-4 space-y-1">
+                          <p className="text-slate-400">
+                            Sessions Linked: <strong className="text-white font-mono">{user.sessions_count || 0}</strong>
                           </p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 space-y-1">
-                        <p className="text-slate-400">
-                          Sessions Linked: <strong className="text-white font-mono">{user.sessions_count || 0}</strong>
-                        </p>
-                        <p className="text-slate-400">
-                          Announcements: <strong className="text-white font-mono">{user.announcements_count || 0}</strong>
-                        </p>
-                      </td>
-                      <td className="px-6 py-4 text-slate-400">
-                        {new Date(user.created_at).toLocaleDateString('en-GB', {
-                          day: '2-digit', month: 'short', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit'
-                        })}
-                      </td>
-                      <td className="px-6 py-4 text-right space-y-2">
-                        <button
-                          onClick={() => handleToggleSubscription(user.id)}
-                          disabled={actionId === user.id}
-                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${isActive ? 'bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white' : 'bg-emerald-500/10 hover:bg-emerald-600 text-emerald-400 hover:text-white'}`}
-                        >
-                          {actionId === user.id ? (
-                            <RefreshCw size={12} className="animate-spin inline" />
-                          ) : isActive ? (
-                            'Revoke Access'
-                          ) : (
-                            'Grant Access'
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleToggleTier(user.id, user.tier === 'plus' ? 'trial' : 'plus')}
-                          disabled={actionId === user.id}
-                          className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'plus' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
-                        >
-                          {user.tier === 'plus' ? 'Downgrade to Trial' : 'Upgrade to Plus'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <p className="text-slate-400">
+                            Announcements: <strong className="text-white font-mono">{user.announcements_count || 0}</strong>
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">
+                          {new Date(user.created_at).toLocaleDateString('en-GB', {
+                            day: '2-digit', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                          })}
+                        </td>
+                        <td className="px-6 py-4 text-right space-y-2">
+                          <button
+                            onClick={() => handleToggleSubscription(user.id)}
+                            disabled={actionId === user.id}
+                            className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${isActive ? 'bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white' : 'bg-emerald-500/10 hover:bg-emerald-600 text-emerald-400 hover:text-white'}`}
+                          >
+                            {actionId === user.id ? (
+                              <RefreshCw size={12} className="animate-spin inline" />
+                            ) : isActive ? (
+                              'Revoke Access'
+                            ) : (
+                              'Grant Access'
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleToggleTier(user.id, user.tier === 'plus' ? 'trial' : 'plus')}
+                            disabled={actionId === user.id}
+                            className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'plus' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
+                          >
+                            {user.tier === 'plus' ? 'Downgrade to Trial' : 'Upgrade to Plus'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
