@@ -424,7 +424,7 @@ func handleContacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts()
+	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts(r.Context())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch contacts: %v", err), http.StatusInternalServerError)
 		return
