@@ -79,7 +79,11 @@ router.post('/whatsapp/sync-contacts', requireAuth, requireSubscription, async (
         res.json({ message: 'WhatsApp contacts sync completed', ...result });
     } catch (error) {
         console.error('Error syncing contacts:', error);
-        res.status(500).json({ error: error.message });
+        const errMsg = error.response?.data || error.message || 'WhatsApp bridge error';
+        const userMsg = typeof errMsg === 'string' && errMsg.includes('Session not found')
+            ? 'WhatsApp session is not connected. Please scan QR code on the WhatsApp Status page to link your account.'
+            : (typeof errMsg === 'string' ? errMsg : 'Failed to communicate with WhatsApp bridge. Make sure your WhatsApp session is connected.');
+        res.status(400).json({ error: userMsg });
     }
 });
 

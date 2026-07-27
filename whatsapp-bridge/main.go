@@ -354,23 +354,77 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleGroups(w http.ResponseWriter, r *http.Request) {
-	from := r.URL.Query().Get("from")
+func findSession(from string) *ClientSession {
+	sessionsMu.RLock()
+	defer sessionsMu.RUnlock()
+
 	if from == "" {
-		http.Error(w, "Session ID parameter 'from' is required", http.StatusBadRequest)
-		return
+		var single *ClientSession
+		connectedCount := 0
+		for _, s := range sessions {
+			if s.Status == "CONNECTED" {
+				single = s
+				connectedCount++
+			}
+		}
+		if connectedCount == 1 {
+			return single
+		}
+		return nil
 	}
 
-	sessionsMu.RLock()
-	selectedSess := sessions[from]
-	sessionsMu.RUnlock()
+	if s, exists := sessions[from]; exists {
+		return s
+	}
+
+	cleanFrom := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, from)
+
+	for key, s := range sessions {
+		if key == from || strings.Contains(key, from) || strings.Contains(from, key) {
+			return s
+		}
+		cleanKey := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, key)
+		if cleanFrom != "" && cleanKey != "" && (cleanFrom == cleanKey || strings.Contains(cleanKey, cleanFrom) || strings.Contains(cleanFrom, cleanKey)) {
+			return s
+		}
+		if s.JID.User != "" && cleanFrom != "" && strings.Contains(cleanFrom, s.JID.User) {
+			return s
+		}
+	}
+
+	return nil
+}
+
+func handleGroups(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("[Bridge Panic] handleGroups error: %v", err)
+			http.Error(w, "Internal bridge error", http.StatusInternalServerError)
+		}
+	}()
+
+	from := r.URL.Query().Get("from")
+	selectedSess := findSession(from)
 
 	if selectedSess == nil || selectedSess.Client == nil {
 		http.Error(w, "Session not found or not connected", http.StatusNotFound)
 		return
 	}
 
-	groups, err := selectedSess.Client.GetJoinedGroups(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	groups, err := selectedSess.Client.GetJoinedGroups(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch groups: %v", err), http.StatusInternalServerError)
 		return
@@ -396,22 +450,25 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleContacts(w http.ResponseWriter, r *http.Request) {
-	from := r.URL.Query().Get("from")
-	if from == "" {
-		http.Error(w, "Session ID parameter 'from' is required", http.StatusBadRequest)
-		return
-	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("[Bridge Panic] handleContacts error: %v", err)
+			http.Error(w, "Internal bridge error", http.StatusInternalServerError)
+		}
+	}()
 
-	sessionsMu.RLock()
-	selectedSess := sessions[from]
-	sessionsMu.RUnlock()
+	from := r.URL.Query().Get("from")
+	selectedSess := findSession(from)
 
 	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Client.Store == nil {
 		http.Error(w, "Session not found or not connected", http.StatusNotFound)
 		return
 	}
 
-	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts(r.Context())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch contacts: %v", err), http.StatusInternalServerError)
 		return
