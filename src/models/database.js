@@ -363,16 +363,47 @@ async function initDb() {
         )
     `);
 
-    // Migrate existing DB if column doesn't exist
+    // Migrate existing DB if columns don't exist
     const columns = await db.all('PRAGMA table_info(settings)');
-    const hasDelay = columns.some(col => col.name === 'send_delay_seconds');
-    if (!hasDelay) {
-        try {
-            await db.exec('ALTER TABLE settings ADD COLUMN send_delay_seconds INTEGER DEFAULT 5');
-            console.log('Migrated settings table: added send_delay_seconds column.');
-        } catch (err) {
-            console.error('Failed to add send_delay_seconds column:', err);
-        }
+    const colNames = columns.map(c => c.name);
+    if (!colNames.includes('send_delay_seconds')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN send_delay_seconds INTEGER DEFAULT 5'); } catch (err) {}
+    }
+    if (!colNames.includes('randomize_delay')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN randomize_delay INTEGER DEFAULT 1'); } catch (err) {}
+    }
+    if (!colNames.includes('auto_retry')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN auto_retry INTEGER DEFAULT 1'); } catch (err) {}
+    }
+    if (!colNames.includes('max_retries')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN max_retries INTEGER DEFAULT 3'); } catch (err) {}
+    }
+    if (!colNames.includes('quiet_hours_enabled')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN quiet_hours_enabled INTEGER DEFAULT 0'); } catch (err) {}
+    }
+    if (!colNames.includes('quiet_hours_start')) {
+        try { await db.exec("ALTER TABLE settings ADD COLUMN quiet_hours_start TEXT DEFAULT '22:00'"); } catch (err) {}
+    }
+    if (!colNames.includes('quiet_hours_end')) {
+        try { await db.exec("ALTER TABLE settings ADD COLUMN quiet_hours_end TEXT DEFAULT '07:00'"); } catch (err) {}
+    }
+    if (!colNames.includes('ai_tone')) {
+        try { await db.exec("ALTER TABLE settings ADD COLUMN ai_tone TEXT DEFAULT 'Professional'"); } catch (err) {}
+    }
+    if (!colNames.includes('ai_language')) {
+        try { await db.exec("ALTER TABLE settings ADD COLUMN ai_language TEXT DEFAULT 'English'"); } catch (err) {}
+    }
+    if (!colNames.includes('notify_email_failures')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN notify_email_failures INTEGER DEFAULT 1'); } catch (err) {}
+    }
+    if (!colNames.includes('notify_email_disconnects')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN notify_email_disconnects INTEGER DEFAULT 1'); } catch (err) {}
+    }
+    if (!colNames.includes('notify_email_low_credits')) {
+        try { await db.exec('ALTER TABLE settings ADD COLUMN notify_email_low_credits INTEGER DEFAULT 1'); } catch (err) {}
+    }
+    if (!colNames.includes('webhook_url')) {
+        try { await db.exec("ALTER TABLE settings ADD COLUMN webhook_url TEXT DEFAULT ''"); } catch (err) {}
     }
 
     // Insert default settings if not present

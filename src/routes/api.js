@@ -17,6 +17,7 @@ const waClient = require('../services/whatsapp');
 router.post('/auth/signup', authController.signup);
 router.post('/auth/login', authController.login);
 router.get('/auth/me', requireAuth, authController.me);
+router.post('/auth/change-password', requireAuth, authController.changePassword);
 
 // ── Paystack Payments ────────────────────────────────────────────────────────
 router.post('/payments/initialize', requireAuth, paymentController.initialize);

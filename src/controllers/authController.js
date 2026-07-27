@@ -111,6 +111,39 @@ const authController = {
                 is_admin: req.user.email === (process.env.ADMIN_EMAIL || '')
             }
         });
+    },
+
+    async changePassword(req, res) {
+        try {
+            const { current_password, new_password } = req.body;
+            if (!current_password || !new_password) {
+                return res.status(400).json({ error: 'Current password and new password are required.' });
+            }
+            if (new_password.length < 6) {
+                return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+            }
+
+            const db = await getDb();
+            const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found.' });
+            }
+
+            const match = await bcrypt.compare(current_password, user.password_hash);
+            if (!match) {
+                return res.status(400).json({ error: 'Incorrect current password.' });
+            }
+
+            const newHash = await bcrypt.hash(new_password, 10);
+            await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
+
+            await logActivity('password_changed', `User ${user.email} changed password.`, req.user.id);
+
+            res.json({ message: 'Password updated successfully.' });
+        } catch (err) {
+            console.error('[Auth changePassword] Error:', err);
+            res.status(500).json({ error: 'Failed to update password.' });
+        }
     }
 };
 
