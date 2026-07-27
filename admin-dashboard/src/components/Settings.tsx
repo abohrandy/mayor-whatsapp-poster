@@ -85,24 +85,38 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
     fetchSettingsAndProfile();
   }, []);
 
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('token');
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
   const fetchSettingsAndProfile = async () => {
+    setLoading(true);
+    setMessage({ type: '', text: '' });
     try {
-      setLoading(true);
+      const authHeader = getAuthHeader();
       const [settRes, meRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/settings`),
-        axios.get(`${API_BASE_URL}/auth/me`).catch(() => ({ data: null }))
+        axios.get(`${API_BASE_URL}/settings`, authHeader).catch(err => {
+          console.warn('[Settings] Failed to fetch settings API:', err);
+          return null;
+        }),
+        axios.get(`${API_BASE_URL}/auth/me`, authHeader).catch(err => {
+          console.warn('[Settings] Failed to fetch user profile:', err);
+          return null;
+        })
       ]);
 
-      if (settRes.data) {
-        setSettings({
+      if (settRes?.data) {
+        setSettings(prev => ({
+          ...prev,
           ...settRes.data,
-          randomize_delay: Boolean(settRes.data.randomize_delay),
-          auto_retry: Boolean(settRes.data.auto_retry),
-          quiet_hours_enabled: Boolean(settRes.data.quiet_hours_enabled),
-          notify_email_failures: Boolean(settRes.data.notify_email_failures),
-          notify_email_disconnects: Boolean(settRes.data.notify_email_disconnects),
-          notify_email_low_credits: Boolean(settRes.data.notify_email_low_credits)
-        });
+          randomize_delay: settRes.data.randomize_delay !== undefined ? Boolean(settRes.data.randomize_delay) : prev.randomize_delay,
+          auto_retry: settRes.data.auto_retry !== undefined ? Boolean(settRes.data.auto_retry) : prev.auto_retry,
+          quiet_hours_enabled: settRes.data.quiet_hours_enabled !== undefined ? Boolean(settRes.data.quiet_hours_enabled) : prev.quiet_hours_enabled,
+          notify_email_failures: settRes.data.notify_email_failures !== undefined ? Boolean(settRes.data.notify_email_failures) : prev.notify_email_failures,
+          notify_email_disconnects: settRes.data.notify_email_disconnects !== undefined ? Boolean(settRes.data.notify_email_disconnects) : prev.notify_email_disconnects,
+          notify_email_low_credits: settRes.data.notify_email_low_credits !== undefined ? Boolean(settRes.data.notify_email_low_credits) : prev.notify_email_low_credits
+        }));
       }
 
       if (meRes?.data?.user) {
@@ -110,8 +124,8 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
       } else if (propsUser) {
         setUserProfile(propsUser);
       }
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to load settings.' });
+    } catch (err: any) {
+      console.error('[Settings] Unexpected load error:', err);
     } finally {
       setLoading(false);
     }
@@ -122,9 +136,9 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
     try {
       setSaving(true);
       setMessage({ type: '', text: '' });
-      await axios.post(`${API_BASE_URL}/settings`, settings);
+      await axios.post(`${API_BASE_URL}/settings`, settings, getAuthHeader());
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      setTimeout(() => setMessage({ type: '', text: '' }), 3500);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save settings.' });
     } finally {
@@ -144,10 +158,10 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
       await axios.post(`${API_BASE_URL}/auth/change-password`, {
         current_password: passwordForm.current_password,
         new_password: passwordForm.new_password
-      });
+      }, getAuthHeader());
       setPassMessage({ type: 'success', text: 'Password changed successfully!' });
       setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
-      setTimeout(() => setPassMessage({ type: '', text: '' }), 3000);
+      setTimeout(() => setPassMessage({ type: '', text: '' }), 3500);
     } catch (err: any) {
       setPassMessage({ type: 'error', text: err.response?.data?.error || 'Failed to change password.' });
     } finally {
@@ -162,7 +176,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
     }
     setTesting(true);
     try {
-      await axios.post(`${API_BASE_URL}/whatsapp/send-test`, { groupId: testGroupId });
+      await axios.post(`${API_BASE_URL}/whatsapp/send-test`, { groupId: testGroupId }, getAuthHeader());
       alert('Test message sent successfully!');
     } catch (err: any) {
       alert('Failed: ' + (err.response?.data?.error || err.message));
@@ -195,11 +209,11 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
           </p>
         </div>
 
-        {/* Tab Buttons (Responsive Wrapping) */}
+        {/* Tab Buttons */}
         <div className="flex flex-wrap bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1.5 w-full xl:w-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('automation')}
+            onClick={() => { setActiveTab('automation'); setMessage({ type: '', text: '' }); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'automation' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
@@ -208,7 +222,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('ai')}
+            onClick={() => { setActiveTab('ai'); setMessage({ type: '', text: '' }); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'ai' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
@@ -217,7 +231,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('notifications')}
+            onClick={() => { setActiveTab('notifications'); setMessage({ type: '', text: '' }); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'notifications' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
@@ -226,7 +240,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('test')}
+            onClick={() => { setActiveTab('test'); setMessage({ type: '', text: '' }); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'test' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
@@ -235,7 +249,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('security')}
+            onClick={() => { setActiveTab('security'); setMessage({ type: '', text: '' }); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'security' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
