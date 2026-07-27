@@ -23,6 +23,10 @@ interface Announcement {
   recurrence_days_of_week: string; // JSON
   post_time: string;
   target_groups: string; // JSON
+  target_contacts?: string; // JSON
+  target_contact_lists?: string; // JSON
+  target_audience_lists?: string; // JSON
+  include_status?: number;
   ribbon_index: number;
   status: 'active' | 'inactive';
   next_post_at: string | null;
@@ -90,7 +94,6 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
   const [groupSearchTerm, setGroupSearchTerm] = useState('');
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
-  const [profiles, setProfiles] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [postingId, setPostingId] = useState<number | null>(null);
   const [previewAnn, setPreviewAnn] = useState<Announcement | null>(null);
@@ -108,9 +111,21 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     post_time: '08:00',
     next_post_at: '',
     target_groups: [] as string[],
+    target_contacts: [] as number[],
+    target_contact_lists: [] as number[],
+    target_audience_lists: [] as number[],
+    include_status: false,
     sender_jid: '',
   };
   const [form, setForm] = useState(defaultForm);
+  const [destinationTab, setDestinationTab] = useState<'groups' | 'contacts' | 'contact_lists' | 'audience_lists' | 'status'>('groups');
+  const [contactsList, setContactsList] = useState<any[]>([]);
+  const [contactLists, setContactLists] = useState<any[]>([]);
+  const [audienceLists, setAudienceLists] = useState<any[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiCredits, setAiCredits] = useState<{ remainingCredits: number; monthlyLimit: number; resetDate: string | null } | null>(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
 
   // New media files selected for upload
   const [newFiles, setNewFiles] = useState<File[]>([]);
@@ -179,17 +194,106 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     } finally { setGroupsLoading(false); }
   };
 
-  const fetchProfiles = async () => {
+  const fetchAudienceListsData = async () => {
     try {
-      const res = await axios.get(`${API}/profiles`);
-      setProfiles(res.data);
+      const res = await axios.get(`${API}/audience-lists`).catch(() => axios.get(`${API}/profiles`));
+      setAudienceLists(res.data);
     } catch (e) {
-      console.error('Failed to fetch profiles', e);
+      console.error('Failed to fetch audience lists', e);
+    }
+  };
+
+  const fetchContactsData = async () => {
+    try {
+      const res = await axios.get(`${API}/contacts`);
+      setContactsList(res.data);
+    } catch { setContactsList([]); }
+  };
+
+  const fetchContactListsData = async () => {
+    try {
+      const res = await axios.get(`${API}/contact-lists`);
+      setContactLists(res.data);
+    } catch { setContactLists([]); }
+  };
+
+  const fetchAICredits = async () => {
+    try {
+      const res = await axios.get(`${API}/ai/credits`);
+      setAiCredits(res.data);
+    } catch {}
+  };
+
+  const fetchUsageHistory = async () => {
+    try {
+      const res = await axios.get(`${API}/ai/usage-history`);
+      setHistoryLogs(res.data);
+      setShowHistoryModal(true);
+    } catch {}
+  };
+
+  const handleAIProcess = async (operation: string, targetLanguage?: string) => {
+    if (aiCredits && aiCredits.remainingCredits <= 0) {
+      const resetStr = aiCredits.resetDate ? new Date(aiCredits.resetDate).toLocaleDateString() : 'next billing cycle';
+      alert(`Insufficient AI credits remaining (0 credits available). Your credits will reset on ${resetStr}.`);
+      return;
+    }
+
+    const textToProcess = (form.caption_variations && form.caption_variations.length > 0)
+      ? form.caption_variations[0]
+      : form.caption;
+
+    if (!textToProcess || !textToProcess.trim()) {
+      alert('Please enter a caption or message text first for AI processing.');
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const res = await axios.post(`${API}/ai/process`, {
+        operation,
+        text: textToProcess,
+        targetLanguage,
+        count: 3
+      });
+
+      if (res.data.remainingCredits !== undefined) {
+        setAiCredits(prev => ({
+          remainingCredits: res.data.remainingCredits,
+          monthlyLimit: prev?.monthlyLimit || 50,
+          resetDate: res.data.resetDate || prev?.resetDate || null
+        }));
+      }
+
+      if (operation === 'generate_variations') {
+        const vars = Array.isArray(res.data.result) ? res.data.result : [res.data.result];
+        setForm(prev => ({
+          ...prev,
+          caption_variations: vars
+        }));
+      } else {
+        const textResult = res.data.result;
+        setForm(prev => ({
+          ...prev,
+          caption: textResult,
+          caption_variations: prev.caption_variations && prev.caption_variations.length > 0
+            ? [textResult, ...prev.caption_variations.slice(1)]
+            : []
+        }));
+      }
+    } catch (err: any) {
+      alert('AI processing error: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setAiLoading(false);
     }
   };
 
   const openModal = async (ann?: Announcement) => {
     await fetchSessions();
+    fetchAudienceListsData();
+    fetchContactsData();
+    fetchContactListsData();
+    fetchAICredits();
     if (ann) {
       setEditingId(ann.id);
       setForm({
@@ -203,6 +307,10 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
         post_time: ann.post_time || '08:00',
         next_post_at: ann.next_post_at ? ann.next_post_at.slice(0, 16) : '',
         target_groups: parseJSON<string[]>(ann.target_groups, []),
+        target_contacts: parseJSON<number[]>(ann.target_contacts || '[]', []),
+        target_contact_lists: parseJSON<number[]>(ann.target_contact_lists || '[]', []),
+        target_audience_lists: parseJSON<number[]>(ann.target_audience_lists || '[]', []),
+        include_status: Boolean(ann.include_status),
         sender_jid: ann.sender_jid || '',
       });
       setExistingMedia(parseJSON<MediaFile[]>(ann.media_files, []));
@@ -214,7 +322,6 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fetchGroups('');
     }
     setNewFiles([]);
-    fetchProfiles();
     setShowModal(true);
   };
 
@@ -269,8 +376,14 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.target_groups.length === 0) {
-      alert('Please select at least one target group.');
+    const hasAnyTarget = form.target_groups.length > 0 ||
+      form.target_contacts.length > 0 ||
+      form.target_contact_lists.length > 0 ||
+      form.target_audience_lists.length > 0 ||
+      form.include_status;
+
+    if (!hasAnyTarget) {
+      alert('Please select at least one target destination (Groups, Contacts, Contact Lists, Audience Lists, or WhatsApp Status).');
       return;
     }
 
@@ -283,6 +396,10 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('is_recurring', form.is_recurring ? '1' : '0');
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
+      fd.append('target_contacts', JSON.stringify(form.target_contacts));
+      fd.append('target_contact_lists', JSON.stringify(form.target_contact_lists));
+      fd.append('target_audience_lists', JSON.stringify(form.target_audience_lists));
+      fd.append('include_status', form.include_status ? '1' : '0');
       fd.append('keep_media', '1'); // keep existing when editing
       fd.append('sender_jid', form.sender_jid || '');
 
@@ -624,6 +741,47 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   </label>
                 </div>
 
+                {/* AI Assistant Toolbar & Credit System */}
+                <div className="bg-slate-900/60 border border-indigo-500/20 rounded-xl p-3 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/40 pb-2">
+                    <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                      ✨ AI Assistant:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {aiCredits && (
+                        <div className="text-[11px] bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-md text-slate-300 font-medium">
+                          Remaining Credits: <strong className={aiCredits.remainingCredits > 0 ? 'text-emerald-400' : 'text-rose-400'}>{aiCredits.remainingCredits}</strong> / {aiCredits.monthlyLimit}
+                          {aiCredits.resetDate && (
+                            <span className="text-slate-500 ml-1.5">| Resets: {new Date(aiCredits.resetDate).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={fetchUsageHistory}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                      >
+                        Usage History
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiLoading && (
+                    <div className="text-xs text-indigo-400 flex items-center gap-1">
+                      <RefreshCw size={12} className="animate-spin" /> Processing AI text...
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => handleAIProcess('improve')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Improve</button>
+                    <button type="button" onClick={() => handleAIProcess('rewrite')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Rewrite</button>
+                    <button type="button" onClick={() => handleAIProcess('grammar')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Grammar</button>
+                    <button type="button" onClick={() => handleAIProcess('expand')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Expand</button>
+                    <button type="button" onClick={() => handleAIProcess('shorten')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Shorten</button>
+                    <button type="button" onClick={() => handleAIProcess('generate_variations')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Generate Variations</button>
+                  </div>
+                </div>
+
                 {form.caption_variations && form.caption_variations.length > 0 ? (
                   <div className="space-y-3 bg-slate-900/50 p-4 border border-slate-700/50 rounded-xl">
                     <div className="flex justify-between items-center">
@@ -912,100 +1070,208 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                 </p>
               </div>
 
-              {/* ── Target Groups ─────────────────────────────────────────────── */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
-                    <Users size={15} /> Target Groups *
-                  </label>
-                  <button type="button" onClick={fetchGroups}
-                    className="text-xs text-primary hover:underline flex items-center gap-1">
-                    <RefreshCw size={12} className={groupsLoading ? 'animate-spin' : ''} />
-                    Refresh
+              {/* ── Target Destinations (Groups, Contacts, Lists, Status) ────────────────────── */}
+              <div className="space-y-4">
+                <label className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                  <Users size={16} className="text-indigo-400" /> Target Destinations *
+                </label>
+
+                {/* Navigation Tabs */}
+                <div className="flex flex-wrap gap-1 p-1 bg-slate-900/80 rounded-xl border border-slate-700/60">
+                  <button
+                    type="button"
+                    onClick={() => setDestinationTab('groups')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'groups' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Groups ({form.target_groups.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDestinationTab('contacts')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'contacts' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Contacts ({form.target_contacts.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDestinationTab('contact_lists')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'contact_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Contact Lists ({form.target_contact_lists.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDestinationTab('audience_lists')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'audience_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Audience ({form.target_audience_lists.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDestinationTab('status')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'status' ? 'bg-emerald-600 text-white shadow shadow-emerald-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    WA Status ({form.include_status ? 'ON' : 'OFF'})
                   </button>
                 </div>
 
-                {/* Profile Quick Select */}
-                {profiles.length > 0 && (
-                  <div className="flex items-center gap-2 bg-slate-900/30 border border-slate-800 rounded-lg p-2">
-                    <span className="text-xs text-slate-400 font-medium">Apply Profile:</span>
-                    <select
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          const prof = profiles.find(p => p.id.toString() === val);
-                          if (prof) {
-                            setForm(prev => ({
-                              ...prev,
-                              target_groups: prof.groups
-                            }));
-                          }
-                        }
-                      }}
-                      className="bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
-                      defaultValue=""
-                    >
-                      <option value="">-- Select Profile --</option>
-                      {profiles.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.groups.length} groups)</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Groups Search Input */}
-                {!groupsLoading && groups.length > 0 && (
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
-                    <input
-                      type="text"
-                      placeholder="Search groups by name..."
-                      value={groupSearchTerm}
-                      onChange={(e) => setGroupSearchTerm(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 placeholder-slate-600 transition-colors"
-                    />
-                  </div>
-                )}
-
-                {groupsLoading && <p className="text-xs text-slate-500">Loading groups...</p>}
-
-                {!groupsLoading && groups.length === 0 && (
-                  <p className="text-xs text-slate-500">
-                    No groups loaded. Make sure WhatsApp is connected and click Refresh.
-                  </p>
-                )}
-
-                {/* Chips */}
-                {form.target_groups.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {form.target_groups.map(gid => {
-                      const g = groups.find(x => x.id === gid);
-                      return (
-                        <span key={gid} className="flex items-center gap-1 bg-indigo-600/30 border border-indigo-500/50 text-indigo-300 text-xs px-2 py-1 rounded-full">
-                          {g?.name || gid}
-                          <button type="button" onClick={() => toggleGroup(gid)} className="hover:text-white"><X size={10} /></button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
-                  {groups
-                    .filter(g => g.name.toLowerCase().includes(groupSearchTerm.toLowerCase()))
-                    .map(g => (
-                      <label key={g.id}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_groups.includes(g.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
-                        <input type="checkbox"
-                          className="accent-indigo-500"
-                          checked={form.target_groups.includes(g.id)}
-                          onChange={() => toggleGroup(g.id)}
+                {/* Tab 1: Groups */}
+                {destinationTab === 'groups' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Select WhatsApp Groups:</span>
+                      <button type="button" onClick={fetchGroups} className="text-xs text-indigo-400 hover:underline flex items-center gap-1">
+                        <RefreshCw size={12} className={groupsLoading ? 'animate-spin' : ''} /> Refresh Groups
+                      </button>
+                    </div>
+                    {!groupsLoading && groups.length > 0 && (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                        <input
+                          type="text"
+                          placeholder="Search groups..."
+                          value={groupSearchTerm}
+                          onChange={(e) => setGroupSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 placeholder-slate-600"
                         />
-                        <span className="text-sm text-white">{g.name}</span>
-                        {g.isGroup && <span className="ml-auto text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">group</span>}
+                      </div>
+                    )}
+                    <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                      {groups
+                        .filter(g => g.name.toLowerCase().includes(groupSearchTerm.toLowerCase()))
+                        .map(g => (
+                          <label key={g.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_groups.includes(g.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                            <input type="checkbox" className="accent-indigo-500" checked={form.target_groups.includes(g.id)} onChange={() => toggleGroup(g.id)} />
+                            <span className="text-sm text-white">{g.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 2: Contacts */}
+                {destinationTab === 'contacts' && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400">Select Individual Contacts:</span>
+                    <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                      {contactsList.map(c => (
+                        <label key={c.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_contacts.includes(c.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="accent-indigo-500"
+                            checked={form.target_contacts.includes(c.id)}
+                            onChange={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                target_contacts: prev.target_contacts.includes(c.id)
+                                  ? prev.target_contacts.filter(id => id !== c.id)
+                                  : [...prev.target_contacts, c.id]
+                              }));
+                            }}
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-white">{c.name}</div>
+                            <div className="text-xs text-slate-400">{c.phone_number}</div>
+                          </div>
+                        </label>
+                      ))}
+                      {contactsList.length === 0 && <p className="text-xs text-slate-500 p-2">No contacts saved yet. Add contacts in the Audience tab.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 3: Contact Lists */}
+                {destinationTab === 'contact_lists' && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400">Select Contact Segment Lists:</span>
+                    <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                      {contactLists.map(cl => (
+                        <label key={cl.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_contact_lists.includes(cl.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="accent-indigo-500"
+                            checked={form.target_contact_lists.includes(cl.id)}
+                            onChange={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                target_contact_lists: prev.target_contact_lists.includes(cl.id)
+                                  ? prev.target_contact_lists.filter(id => id !== cl.id)
+                                  : [...prev.target_contact_lists, cl.id]
+                              }));
+                            }}
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-white">{cl.name}</div>
+                            {cl.description && <div className="text-xs text-slate-400">{cl.description}</div>}
+                          </div>
+                        </label>
+                      ))}
+                      {contactLists.length === 0 && <p className="text-xs text-slate-500 p-2">No contact lists saved yet.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 4: Audience Lists */}
+                {destinationTab === 'audience_lists' && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400">Select Combined Audience Lists:</span>
+                    <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                      {audienceLists.map(al => (
+                        <label key={al.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_audience_lists.includes(al.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="accent-indigo-500"
+                            checked={form.target_audience_lists.includes(al.id)}
+                            onChange={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                target_audience_lists: prev.target_audience_lists.includes(al.id)
+                                  ? prev.target_audience_lists.filter(id => id !== al.id)
+                                  : [...prev.target_audience_lists, al.id]
+                              }));
+                            }}
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-white">{al.name}</div>
+                            {al.description && <div className="text-xs text-slate-400">{al.description}</div>}
+                          </div>
+                        </label>
+                      ))}
+                      {audienceLists.length === 0 && <p className="text-xs text-slate-500 p-2">No audience lists saved yet.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 5: WhatsApp Status */}
+                {destinationTab === 'status' && (
+                  <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-bold text-white">Broadcast to WhatsApp Status</div>
+                        <div className="text-xs text-slate-400">Post this announcement directly as a WhatsApp Status update/story.</div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={form.include_status}
+                          onChange={e => setForm({ ...form, include_status: e.target.checked })}
+                        />
+                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                       </label>
-                    ))}
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
@@ -1142,6 +1408,46 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
           </div>
         );
       })()}
+
+      {/* ── Usage History Modal ────────────────────────────────────────── */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-900 flex-shrink-0">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Clock size={18} className="text-indigo-400" /> AI Usage History
+              </h3>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-500 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto space-y-2">
+              {historyLogs.length > 0 ? (
+                <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden bg-slate-950/40">
+                  {historyLogs.map(log => (
+                    <div key={log.id} className="p-3 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-white">{log.operation}</div>
+                        <div className="text-[10px] text-slate-500">{new Date(log.createdAt).toLocaleString()}</div>
+                      </div>
+                      <span className="text-xs font-bold text-indigo-400 bg-indigo-600/20 border border-indigo-500/30 px-2 py-0.5 rounded">
+                        -{log.creditsDeducted} Credit{log.creditsDeducted > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-8">No AI credit usage history recorded yet.</p>
+              )}
+            </div>
+            <div className="p-3 border-t border-slate-700/50 bg-slate-900 flex justify-end">
+              <button onClick={() => setShowHistoryModal(false)} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-bold transition-all cursor-pointer">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

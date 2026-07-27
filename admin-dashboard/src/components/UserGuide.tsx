@@ -32,15 +32,15 @@ const UserGuide = () => {
     },
     {
       id: 2,
-      title: "Step 2: Create a Posting Profile",
+      title: "Step 2: Create an Audience List",
       icon: Users,
       color: "text-emerald-400 bg-emerald-500/10",
-      description: "Group your WhatsApp target groups under a single profile for quick scheduling.",
+      description: "Group your WhatsApp target groups under a single audience list for quick scheduling.",
       instructions: [
-        "Go to the Posting Profiles page.",
-        "Click the '+ Add Profile' button.",
+        "Go to the Audience Lists page.",
+        "Click the '+ Add Audience List' button.",
         "Provide a clear name (e.g., 'Real Estate Groups' or 'Marketing List').",
-        "Select the groups you want to associate with this profile and click save."
+        "Select the groups you want to associate with this audience list and click save."
       ],
       tip: "Only groups that your connected WhatsApp account is currently participating in will appear in the selection list."
     },
@@ -52,7 +52,7 @@ const UserGuide = () => {
       description: "Create announcements, add spin-tax variations, and schedule campaigns.",
       instructions: [
         "Go to the Announcements page and click '+ New Announcement'.",
-        "Select your connected WhatsApp number and choose your Posting Profile.",
+        "Select your connected WhatsApp number and choose your Audience List.",
         "Upload media files and add text variations to cycle through during posts.",
         "Configure schedule timing (one-time or recurring) and click save."
       ],

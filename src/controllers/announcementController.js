@@ -38,7 +38,9 @@ const announcementController = {
         try {
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
-                recurrence_days_of_week, post_time, target_groups, next_post_at, sender_jid
+                recurrence_days_of_week, post_time, target_groups, target_contacts,
+                target_contact_lists, target_audience_lists, include_status,
+                next_post_at, sender_jid
             } = req.body;
 
             if (!title) return res.status(400).json({ error: 'Title is required.' });
@@ -61,9 +63,20 @@ const announcementController = {
                 }
             }
 
-            // Parse target_groups
+            // Parse target destinations
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
+
+            let contacts = [];
+            try { contacts = JSON.parse(target_contacts || '[]'); } catch { contacts = []; }
+
+            let contactLists = [];
+            try { contactLists = JSON.parse(target_contact_lists || '[]'); } catch { contactLists = []; }
+
+            let audienceLists = [];
+            try { audienceLists = JSON.parse(target_audience_lists || '[]'); } catch { audienceLists = []; }
+
+            const incStatus = parseInt(include_status) ? 1 : 0;
 
             const adminEmail = process.env.ADMIN_EMAIL;
             const isAdmin = adminEmail && req.user.email === adminEmail;
@@ -101,8 +114,8 @@ const announcementController = {
             const db = await initDb();
             const result = await db.run(
                 `INSERT INTO announcements
-                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, sender_jid, post_time, target_groups, ribbon_index, status, next_post_at, user_id)
-                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`,
+                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, sender_jid, post_time, target_groups, target_contacts, target_contact_lists, target_audience_lists, include_status, ribbon_index, status, next_post_at, user_id)
+                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`,
                 [
                     title,
                     caption || '',
@@ -114,6 +127,10 @@ const announcementController = {
                     sender_jid || null,
                     post_time || '08:00',
                     JSON.stringify(groups),
+                    JSON.stringify(contacts),
+                    JSON.stringify(contactLists),
+                    JSON.stringify(audienceLists),
+                    incStatus,
                     nextPostAt || null,
                     req.user.id
                 ]
@@ -133,7 +150,9 @@ const announcementController = {
             const { id } = req.params;
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
-                recurrence_days_of_week, post_time, target_groups, next_post_at, keep_media, sender_jid
+                recurrence_days_of_week, post_time, target_groups, target_contacts,
+                target_contact_lists, target_audience_lists, include_status,
+                next_post_at, keep_media, sender_jid
             } = req.body;
 
             const db = await initDb();
@@ -165,6 +184,17 @@ const announcementController = {
             let groups = [];
             try { groups = JSON.parse(target_groups || '[]'); } catch { groups = []; }
 
+            let contacts = [];
+            try { contacts = JSON.parse(target_contacts || '[]'); } catch { contacts = []; }
+
+            let contactLists = [];
+            try { contactLists = JSON.parse(target_contact_lists || '[]'); } catch { contactLists = []; }
+
+            let audienceLists = [];
+            try { audienceLists = JSON.parse(target_audience_lists || '[]'); } catch { audienceLists = []; }
+
+            const incStatus = parseInt(include_status) ? 1 : 0;
+
             const adminEmail = process.env.ADMIN_EMAIL;
             const isAdmin = adminEmail && req.user.email === adminEmail;
             let maxGroups = 3;
@@ -190,7 +220,9 @@ const announcementController = {
             await db.run(
                 `UPDATE announcements
                  SET title = ?, caption = ?, caption_variations = ?, media_files = ?, is_recurring = ?,
-                     recurrence_days = ?, recurrence_days_of_week = ?, sender_jid = ?, post_time = ?, target_groups = ?, next_post_at = ?
+                     recurrence_days = ?, recurrence_days_of_week = ?, sender_jid = ?, post_time = ?,
+                     target_groups = ?, target_contacts = ?, target_contact_lists = ?, target_audience_lists = ?,
+                     include_status = ?, next_post_at = ?
                  WHERE id = ? AND user_id = ?`,
                 [
                     title,
@@ -203,6 +235,10 @@ const announcementController = {
                     sender_jid || null,
                     post_time || '08:00',
                     JSON.stringify(groups),
+                    JSON.stringify(contacts),
+                    JSON.stringify(contactLists),
+                    JSON.stringify(audienceLists),
+                    incStatus,
                     next_post_at || null,
                     id,
                     req.user.id

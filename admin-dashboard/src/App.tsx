@@ -7,13 +7,16 @@ import Announcements from './components/Announcements';
 import WhatsAppStatus from './components/WhatsAppStatus';
 import Settings from './components/Settings';
 import ActivityLogs from './components/ActivityLogs';
-import PostingProfiles from './components/PostingProfiles';
+import AudienceModule from './components/AudienceModule';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Subscription from './components/Subscription';
 import UserManagement from './components/UserManagement';
 import PlanManagement from './components/PlanManagement';
+import AdminAIDashboard from './components/AdminAIDashboard';
+import JobQueueView from './components/JobQueueView';
 import UserGuide from './components/UserGuide';
+import { Cpu, Layers } from 'lucide-react';
 import { useNotifications } from './hooks/useNotifications';
 
 // Setup global axios headers interceptor
@@ -105,12 +108,16 @@ function App() {
           setOpenNewModalOnMount={setOpenNewAnnouncementModal}
         />
       );
-      case 'profiles': return <PostingProfiles />;
+      case 'audience':
+      case 'audience-lists':
+      case 'profiles': return <AudienceModule />;
       case 'activity': return <ActivityLogs />;
+      case 'jobs': return <JobQueueView />;
       case 'whatsapp': return <WhatsAppStatus />;
       case 'settings': return <Settings />;
       case 'users': return <UserManagement />;
       case 'plans': return <PlanManagement />;
+      case 'ai-control': return <AdminAIDashboard />;
       case 'guide': return <UserGuide />;
       default:
         return user?.is_admin ? (
@@ -124,7 +131,8 @@ function App() {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
     { id: 'announcements', label: 'Announcements', Icon: Megaphone },
-    { id: 'profiles', label: 'Posting Profiles', Icon: Users },
+    { id: 'audience', label: 'Audience', Icon: Users },
+    { id: 'jobs', label: 'Job Queue', Icon: Layers },
     { id: 'activity', label: 'Activity Logs', Icon: History },
     { id: 'whatsapp', label: 'WhatsApp Status', Icon: MessageSquare },
     { id: 'settings', label: 'Settings', Icon: SettingsIcon },
@@ -134,17 +142,22 @@ function App() {
   if (user && user.is_admin) {
     navItems.push({ id: 'users', label: 'User Management', Icon: ShieldCheck });
     navItems.push({ id: 'plans', label: 'Subscription Plans', Icon: Package });
+    navItems.push({ id: 'ai-control', label: 'AI Control Center', Icon: Cpu });
   }
 
   const tabLabels: Record<string, string> = {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
-    profiles: 'Posting Profiles',
+    audience: 'Audience Management',
+    'audience-lists': 'Audience Lists',
+    profiles: 'Audience Lists',
+    jobs: 'Job Queue & Telemetry',
     activity: 'Activity Logs',
     whatsapp: 'WhatsApp Status',
     settings: 'Settings',
     users: 'User Management',
     plans: 'Subscription Plans',
+    'ai-control': 'AI Control Center',
     guide: 'User Guide',
   };
 

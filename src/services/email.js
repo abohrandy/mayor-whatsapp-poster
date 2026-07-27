@@ -106,7 +106,7 @@ async function sendWelcomeEmail(userEmail, trialEndsAt) {
       <ul style="color:#94a3b8;padding-left:20px;line-height:2;">
         <li>Link your WhatsApp account via QR code</li>
         <li>Create and schedule announcements</li>
-        <li>Set up posting profiles for your groups</li>
+        <li>Set up audience lists for your groups</li>
         <li>Track activity logs in real-time</li>
       </ul>
       <a href="${process.env.APP_URL || '#'}" style="display:inline-block;margin-top:24px;padding:12px 28px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">Open Dashboard →</a>

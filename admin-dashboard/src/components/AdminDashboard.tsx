@@ -151,7 +151,7 @@ const AdminDashboard = ({ setActiveTab }: any) => {
           value={overview.totalAnnouncements || 0}
           icon={Megaphone}
           color="bg-amber-500"
-          subtext={`across ${overview.totalProfiles || 0} profiles`}
+          subtext={`across ${overview.totalAudienceLists || overview.totalProfiles || 0} audience lists`}
         />
       </div>
 

@@ -22,9 +22,9 @@
 * **Normalized Content Rate-Limiting**: A background SHA-256 hashing service blocks accounts from posting identical text to prevent reckless spamming (enforced at 12 hours for Trial users and 6 hours for Premium users).
 * **Controlled Message Staggering**: Integrates a configurable send-delay between groups to avoid sending a burst of messages simultaneously, keeping account flags low.
 
-### 4. Group Collections & Posting Profiles
-* **Custom Group Sets**: Save collections of WhatsApp groups under target "Posting Profiles" (e.g., "Real Estate Groups," "Tech Groups").
-* **Bulk Scheduling**: Select a posting profile when creating an announcement to queue messages to all groups in that profile with one click.
+### 4. Group Collections & Audience Lists
+* **Custom Group Sets**: Save collections of WhatsApp groups under target "Audience Lists" (e.g., "Real Estate Groups," "Tech Groups").
+* **Bulk Scheduling**: Select an audience list when creating an announcement to queue messages to all groups in that list with one click.
 * **Live Chat/Group Fetching**: Automatically imports all active groups that the sender account is part of, making selections fast and seamless.
 
 ### 5. SaaS Subscription & Admin Controls

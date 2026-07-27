@@ -39,6 +39,11 @@ const WhatsAppStatus = () => {
     const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
     const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
     const [sendingStates, setSendingStates] = useState<Record<string, boolean>>({});
+    const [syncingContacts, setSyncingContacts] = useState<Record<string, boolean>>({});
+    const [contactSyncInfo, setContactSyncInfo] = useState<{ lastSyncedAt: string | null; syncedCount: number }>({
+        lastSyncedAt: null,
+        syncedCount: 0
+    });
 
     useEffect(() => {
         const handleResize = () => setIsMobile(isMobileDevice());
@@ -46,6 +51,7 @@ const WhatsAppStatus = () => {
 
         // Initial fetch
         fetchSessions();
+        fetchSyncStatus();
 
         // Socket listeners
         socket.on('whatsapp_status', (data) => {
@@ -77,6 +83,37 @@ const WhatsAppStatus = () => {
             console.error('Failed to fetch status', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchSyncStatus = async () => {
+        try {
+            const res = await axios.get('/api/whatsapp/contact-sync-status');
+            setContactSyncInfo(res.data);
+        } catch (e) {}
+    };
+
+    const handleSyncContacts = async (sessionId: string) => {
+        setSyncingContacts(prev => ({ ...prev, [sessionId]: true }));
+        try {
+            const res = await axios.post('/api/whatsapp/sync-contacts', { session_id: sessionId });
+            setLogs(prev => [{
+                time: new Date().toLocaleTimeString(),
+                msg: `Harvested ${res.data.count} contacts from WhatsApp session ${sessionId}!`,
+                type: 'success'
+            }, ...prev]);
+            alert(`Harvested ${res.data.count} contacts successfully!`);
+            fetchSyncStatus();
+        } catch (error: any) {
+            const errText = error.response?.data?.error || error.message;
+            setLogs(prev => [{
+                time: new Date().toLocaleTimeString(),
+                msg: `Failed to harvest contacts for ${sessionId}: ` + errText,
+                type: 'error'
+            }, ...prev]);
+            alert('Failed to harvest contacts: ' + errText);
+        } finally {
+            setSyncingContacts(prev => ({ ...prev, [sessionId]: false }));
         }
     };
 
@@ -429,6 +466,30 @@ const WhatsAppStatus = () => {
                                             </div>
                                         ) : isConnected ? (
                                             <div className="space-y-4">
+                                                {/* Contact Sync Actions */}
+                                                <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                                            <Users size={14} className="text-emerald-400" /> WhatsApp Contacts Sync
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-400 mt-0.5">
+                                                            {contactSyncInfo.lastSyncedAt ? (
+                                                                <span>Last Synced: <strong className="text-emerald-400">{new Date(contactSyncInfo.lastSyncedAt).toLocaleString()}</strong> ({contactSyncInfo.syncedCount} contacts harvested)</span>
+                                                            ) : (
+                                                                <span>Last Synced: <span className="text-slate-500">Not synced yet</span></span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleSyncContacts(sess.id)}
+                                                        disabled={syncingContacts[sess.id]}
+                                                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                                                    >
+                                                        <RefreshCw size={12} className={syncingContacts[sess.id] ? 'animate-spin' : ''} />
+                                                        {syncingContacts[sess.id] ? 'Harvesting...' : 'Sync Contacts Now'}
+                                                    </button>
+                                                </div>
+
                                                 {/* Join Group Input */}
                                                 <div className="bg-slate-950/40 border border-slate-800 rounded-lg p-3 space-y-2">
                                                     <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">

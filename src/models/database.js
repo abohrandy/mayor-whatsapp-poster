@@ -53,6 +53,146 @@ async function initDb() {
         }
     }
 
+    if (!usersColumns.some(col => col.name === 'ai_credits_remaining')) {
+        try { await db.exec("ALTER TABLE users ADD COLUMN ai_credits_remaining INTEGER DEFAULT 50"); } catch (err) {}
+    }
+    if (!usersColumns.some(col => col.name === 'ai_credits_monthly_limit')) {
+        try { await db.exec("ALTER TABLE users ADD COLUMN ai_credits_monthly_limit INTEGER DEFAULT 50"); } catch (err) {}
+    }
+    if (!usersColumns.some(col => col.name === 'ai_credits_reset_at')) {
+        try {
+            const nextMonth = new Date();
+            nextMonth.setDate(nextMonth.getDate() + 30);
+            await db.exec(`ALTER TABLE users ADD COLUMN ai_credits_reset_at DATETIME DEFAULT '${nextMonth.toISOString()}'`);
+        } catch (err) {}
+    }
+
+    // AI Credit Logs table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_credit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            operation TEXT NOT NULL,
+            credits_deducted INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
+    // AI Settings table (Super Admin)
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            openrouter_api_key TEXT DEFAULT NULL,
+            active_model TEXT DEFAULT 'deepseek/deepseek-chat',
+            fallback_model TEXT DEFAULT 'qwen/qwen-2.5-72b-instruct',
+            fallback_model_1 TEXT DEFAULT 'qwen/qwen-2.5-72b-instruct',
+            fallback_model_2 TEXT DEFAULT 'thudm/glm-4-9b-chat',
+            fallback_model_3 TEXT DEFAULT 'minimax/minimax-01',
+            disabled_models TEXT DEFAULT '["openai/gpt-4o-mini","openai/gpt-4o","anthropic/claude-3.5-haiku","google/gemini-2.5-flash"]',
+            ai_enabled INTEGER DEFAULT 1,
+            credits_trial INTEGER DEFAULT 50,
+            credits_plus INTEGER DEFAULT 200,
+            credits_unlimited INTEGER DEFAULT 1000,
+            cost_per_feature TEXT DEFAULT '{}'
+        )
+    `);
+
+    const aiSettingsCols = await db.all('PRAGMA table_info(ai_settings)');
+    if (!aiSettingsCols.some(col => col.name === 'fallback_model_1')) {
+        try { await db.exec("ALTER TABLE ai_settings ADD COLUMN fallback_model_1 TEXT DEFAULT 'qwen/qwen-2.5-72b-instruct'"); } catch (err) {}
+    }
+    if (!aiSettingsCols.some(col => col.name === 'fallback_model_2')) {
+        try { await db.exec("ALTER TABLE ai_settings ADD COLUMN fallback_model_2 TEXT DEFAULT 'thudm/glm-4-9b-chat'"); } catch (err) {}
+    }
+    if (!aiSettingsCols.some(col => col.name === 'fallback_model_3')) {
+        try { await db.exec("ALTER TABLE ai_settings ADD COLUMN fallback_model_3 TEXT DEFAULT 'minimax/minimax-01'"); } catch (err) {}
+    }
+    if (!aiSettingsCols.some(col => col.name === 'disabled_models')) {
+        try { await db.exec('ALTER TABLE ai_settings ADD COLUMN disabled_models TEXT DEFAULT \'["openai/gpt-4o-mini","openai/gpt-4o","anthropic/claude-3.5-haiku","google/gemini-2.5-flash"]\''); } catch (err) {}
+    }
+
+    const aiSettingsCount = await db.get('SELECT COUNT(*) as count FROM ai_settings');
+    if (aiSettingsCount.count === 0) {
+        const defaultCostPerFeature = JSON.stringify({
+            improve: 1,
+            rewrite: 1,
+            grammar: 1,
+            translate: 1,
+            expand: 1,
+            shorten: 1,
+            generate_variations: 1
+        });
+        await db.run(
+            `INSERT INTO ai_settings (id, active_model, fallback_model, fallback_model_1, fallback_model_2, fallback_model_3, disabled_models, ai_enabled, credits_trial, credits_plus, credits_unlimited, cost_per_feature)
+             VALUES (1, 'deepseek/deepseek-chat', 'qwen/qwen-2.5-72b-instruct', 'qwen/qwen-2.5-72b-instruct', 'thudm/glm-4-9b-chat', 'minimax/minimax-01', '["openai/gpt-4o-mini","openai/gpt-4o","anthropic/claude-3.5-haiku","google/gemini-2.5-flash"]', 1, 50, 200, 1000, ?)`,
+            [defaultCostPerFeature]
+        );
+    }
+
+
+    // AI Request Logs table (Super Admin detailed telemetry)
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_request_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            user_email TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            credits_deducted INTEGER NOT NULL DEFAULT 1,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            estimated_cost REAL DEFAULT 0.0,
+            model_used TEXT NOT NULL,
+            response_time_ms INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'success',
+            fallback_occurred INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
+    const reqLogColumns = await db.all('PRAGMA table_info(ai_request_logs)');
+    if (!reqLogColumns.some(col => col.name === 'response_time_ms')) {
+        try { await db.exec("ALTER TABLE ai_request_logs ADD COLUMN response_time_ms INTEGER DEFAULT 0"); } catch (err) {}
+    }
+    if (!reqLogColumns.some(col => col.name === 'status')) {
+        try { await db.exec("ALTER TABLE ai_request_logs ADD COLUMN status TEXT DEFAULT 'success'"); } catch (err) {}
+    }
+    if (!reqLogColumns.some(col => col.name === 'fallback_occurred')) {
+        try { await db.exec("ALTER TABLE ai_request_logs ADD COLUMN fallback_occurred INTEGER DEFAULT 0"); } catch (err) {}
+    }
+
+
+    // Queue Jobs table
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            attempts INTEGER DEFAULT 0,
+            max_retries INTEGER DEFAULT 3,
+            error_message TEXT DEFAULT NULL,
+            user_id INTEGER DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Queue Job Logs table (5 log types: automation, whatsapp, ai, sync, error)
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS job_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            log_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            details TEXT DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+        )
+    `);
+
     // Post History table
     await db.exec(`
         CREATE TABLE IF NOT EXISTS post_history (
@@ -108,10 +248,19 @@ async function initDb() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             session_id TEXT NOT NULL UNIQUE,
+            last_contacts_synced_at DATETIME DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     `);
+
+    const sessColumns = await db.all('PRAGMA table_info(whatsapp_sessions)');
+    const hasLastSynced = sessColumns.some(col => col.name === 'last_contacts_synced_at');
+    if (!hasLastSynced) {
+        try {
+            await db.exec("ALTER TABLE whatsapp_sessions ADD COLUMN last_contacts_synced_at DATETIME DEFAULT NULL");
+        } catch (err) {}
+    }
 
     // Announcements table
     await db.exec(`
@@ -147,6 +296,22 @@ async function initDb() {
         } catch (err) {
             console.error('Failed to add caption_variations/caption_index to announcements:', err);
         }
+    }
+
+    if (!annColumns.some(col => col.name === 'target_contacts')) {
+        try { await db.exec("ALTER TABLE announcements ADD COLUMN target_contacts TEXT NOT NULL DEFAULT '[]'"); } catch (err) {}
+    }
+
+    if (!annColumns.some(col => col.name === 'target_contact_lists')) {
+        try { await db.exec("ALTER TABLE announcements ADD COLUMN target_contact_lists TEXT NOT NULL DEFAULT '[]'"); } catch (err) {}
+    }
+
+    if (!annColumns.some(col => col.name === 'target_audience_lists')) {
+        try { await db.exec("ALTER TABLE announcements ADD COLUMN target_audience_lists TEXT NOT NULL DEFAULT '[]'"); } catch (err) {}
+    }
+
+    if (!annColumns.some(col => col.name === 'include_status')) {
+        try { await db.exec("ALTER TABLE announcements ADD COLUMN include_status INTEGER NOT NULL DEFAULT 0"); } catch (err) {}
     }
 
     const hasDaysOfWeek = annColumns.some(col => col.name === 'recurrence_days_of_week');
@@ -229,26 +394,80 @@ async function initDb() {
         }
     }
 
-    // Posting profiles
+    // Audience lists (formerly Posting Profiles)
+    const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table'");
+    const tableNames = tables.map(t => t.name);
+
+    if (tableNames.includes('posting_profiles') && !tableNames.includes('audience_lists')) {
+        try {
+            await db.exec("ALTER TABLE posting_profiles RENAME TO audience_lists");
+            console.log('Migrated database table: posting_profiles -> audience_lists');
+        } catch (err) {
+            console.error('Failed to rename posting_profiles table to audience_lists:', err);
+        }
+    }
+
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS posting_profiles (
+        CREATE TABLE IF NOT EXISTS contacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            phone_number TEXT NOT NULL,
+            email TEXT,
+            tags TEXT DEFAULT '[]',
+            custom_fields TEXT DEFAULT '{}',
+            user_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS contact_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            contact_ids TEXT DEFAULT '[]',
+            user_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS audience_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
             groups TEXT NOT NULL DEFAULT '[]',
+            contact_list_ids TEXT DEFAULT '[]',
             user_id INTEGER DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
-    const profColumns = await db.all('PRAGMA table_info(posting_profiles)');
-    const hasProfUserId = profColumns.some(col => col.name === 'user_id');
-    if (!hasProfUserId) {
+    const listColumns = await db.all('PRAGMA table_info(audience_lists)');
+    const hasListUserId = listColumns.some(col => col.name === 'user_id');
+    if (!hasListUserId) {
         try {
-            await db.exec("ALTER TABLE posting_profiles ADD COLUMN user_id INTEGER DEFAULT NULL");
-            console.log('Migrated posting_profiles table: added user_id column.');
+            await db.exec("ALTER TABLE audience_lists ADD COLUMN user_id INTEGER DEFAULT NULL");
+            console.log('Migrated audience_lists table: added user_id column.');
         } catch (err) {
-            console.error('Failed to add user_id to posting_profiles:', err);
+            console.error('Failed to add user_id to audience_lists:', err);
         }
+    }
+
+    const hasContactListIds = listColumns.some(col => col.name === 'contact_list_ids');
+    if (!hasContactListIds) {
+        try {
+            await db.exec("ALTER TABLE audience_lists ADD COLUMN contact_list_ids TEXT DEFAULT '[]'");
+        } catch (err) {}
+    }
+
+    const hasDescription = listColumns.some(col => col.name === 'description');
+    if (!hasDescription) {
+        try {
+            await db.exec("ALTER TABLE audience_lists ADD COLUMN description TEXT DEFAULT ''");
+        } catch (err) {}
     }
 
     // Assign any historical orphan records to the first registered user
@@ -256,7 +475,7 @@ async function initDb() {
         const firstUser = await db.get('SELECT id FROM users ORDER BY id ASC LIMIT 1');
         if (firstUser) {
             await db.run('UPDATE announcements SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
-            await db.run('UPDATE posting_profiles SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
+            await db.run('UPDATE audience_lists SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
             await db.run('UPDATE activity_logs SET user_id = ? WHERE user_id IS NULL', [firstUser.id]);
             
             // Also map existing whatsapp sessions from Go store if any exist and are not mapped

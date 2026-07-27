@@ -102,6 +102,7 @@ func main() {
 	mux.HandleFunc("/session/delete", handleDeleteSession)
 	mux.HandleFunc("/send", handleSend)
 	mux.HandleFunc("/groups", handleGroups)
+	mux.HandleFunc("/contacts", handleContacts)
 	mux.HandleFunc("/join", handleJoinGroup)
 
 	server := &http.Server{
@@ -395,6 +396,70 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 			Name:    g.Name,
 			IsGroup: true,
 		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(list)
+}
+
+func handleContacts(w http.ResponseWriter, r *http.Request) {
+	from := r.URL.Query().Get("from")
+
+	sessionsMu.RLock()
+	var selectedSess *ClientSession
+	if from != "" {
+		selectedSess = sessions[from]
+	} else {
+		for _, s := range sessions {
+			if s.Status == "CONNECTED" {
+				selectedSess = s
+				break
+			}
+		}
+	}
+	sessionsMu.RUnlock()
+
+	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Client.Store == nil {
+		http.Error(w, "No connected WhatsApp sessions found", http.StatusServiceUnavailable)
+		return
+	}
+
+	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch contacts: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	type ContactItem struct {
+		JID          string `json:"jid"`
+		PhoneNumber  string `json:"phoneNumber"`
+		Name         string `json:"name"`
+		PushName     string `json:"pushName"`
+		BusinessName string `json:"businessName"`
+	}
+
+	var list []ContactItem = make([]ContactItem, 0)
+	for jid, info := range contacts {
+		if jid.Server == types.DefaultUserServer {
+			name := info.FullName
+			if name == "" {
+				name = info.BusinessName
+			}
+			if name == "" {
+				name = info.PushName
+			}
+			if name == "" {
+				name = jid.User
+			}
+
+			list = append(list, ContactItem{
+				JID:          jid.String(),
+				PhoneNumber:  "+" + jid.User,
+				Name:         name,
+				PushName:     info.PushName,
+				BusinessName: info.BusinessName,
+			})
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

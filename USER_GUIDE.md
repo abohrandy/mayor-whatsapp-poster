@@ -22,23 +22,23 @@ To start sending messages, you need to connect your WhatsApp account to our secu
 
 ---
 
-## 👥 Step 2: Create a Posting Profile
-A **Posting Profile** is a saved collection of WhatsApp groups. Instead of manually selecting groups every time you post, you can group them under a profile (e.g., "Real Estate Groups", "Daily Updates").
+## 👥 Step 2: Create an Audience List
+An **Audience List** is a saved collection of WhatsApp groups. Instead of manually selecting groups every time you post, you can group them under an audience list (e.g., "Real Estate Groups", "Daily Updates").
 
-1. Navigate to the **Posting Profiles** page from the sidebar menu.
-2. Click **`+ Add Profile`**.
+1. Navigate to the **Audience Lists** page from the sidebar menu.
+2. Click **`+ Add Audience List`**.
 3. Enter a descriptive name for your group collection.
 4. Search or select the target WhatsApp groups from your linked account that you want to include in this collection.
-5. Click **`Save Profile`**.
+5. Click **`Save Audience List`**.
 
 ---
 
 ## 📣 Step 3: Schedule and Post Announcements
-Once your WhatsApp is connected and your Posting Profile is ready, you can schedule your announcements.
+Once your WhatsApp is connected and your Audience List is ready, you can schedule your announcements.
 
 1. Navigate to the **Announcements** page and click **`+ New Announcement`**.
 2. **Sender Session**: Select which linked WhatsApp number you want to send the message from.
-3. **Target Groups**: Choose the **Posting Profile** you created in Step 2.
+3. **Target Groups**: Choose the **Audience List** you created in Step 2.
 4. **Announcements Title**: Give your campaign a internal reference name.
 5. **Media Attachment (Optional)**: Upload one or more images or videos. If you upload multiple media files, the app's *Dynamic Media Rotator* will automatically cycle through them on subsequent posts.
 6. **Caption and Variations**:

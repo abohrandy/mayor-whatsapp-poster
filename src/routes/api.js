@@ -3,6 +3,9 @@ const router = express.Router();
 const announcementController = require('../controllers/announcementController');
 const settingsController = require('../controllers/settingsController');
 const profileController = require('../controllers/profileController');
+const audienceListController = require('../controllers/audienceListController');
+const contactController = require('../controllers/contactController');
+const contactListController = require('../controllers/contactListController');
 const authController = require('../controllers/authController');
 const paymentController = require('../controllers/paymentController');
 const adminController = require('../controllers/adminController');
@@ -49,6 +52,132 @@ router.get('/whatsapp/status', requireAuth, requireSubscription, async (req, res
         res.json({ sessions: filteredSessions });
     } catch (error) {
         console.error('Error fetching whatsapp status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/whatsapp/sync-contacts', requireAuth, requireSubscription, async (req, res) => {
+    try {
+        const { session_id } = req.body;
+        const db = await require('../models/database').getDb();
+        let targetSessionJid = null;
+        if (session_id) {
+            const mapping = await db.get('SELECT session_id FROM whatsapp_sessions WHERE user_id = ? AND session_id = ?', [req.user.id, session_id]);
+            if (mapping) targetSessionJid = mapping.session_id;
+        }
+        if (!targetSessionJid) {
+            const first = await db.get('SELECT session_id FROM whatsapp_sessions WHERE user_id = ? LIMIT 1', [req.user.id]);
+            if (first) targetSessionJid = first.session_id;
+        }
+
+        const result = await waClient.syncContacts(targetSessionJid, req.user.id);
+        res.json({ message: 'WhatsApp contacts sync completed', ...result });
+    } catch (error) {
+        console.error('Error syncing contacts:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/whatsapp/contact-sync-status', requireAuth, requireSubscription, async (req, res) => {
+    try {
+        const db = await require('../models/database').getDb();
+        const session = await db.get(
+            'SELECT last_contacts_synced_at FROM whatsapp_sessions WHERE user_id = ? ORDER BY last_contacts_synced_at DESC LIMIT 1',
+            [req.user.id]
+        );
+        const contactCount = await db.get(
+            "SELECT COUNT(*) as count FROM contacts WHERE user_id = ? AND tags LIKE '%whatsapp_synced%'",
+            [req.user.id]
+        );
+        res.json({
+            lastSyncedAt: session?.last_contacts_synced_at || null,
+            syncedCount: contactCount?.count || 0
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ── AI Credit System & Assistant ────────────────────────────────────────────────
+const aiService = require('../ai');
+const { aiCreditManager } = require('../ai');
+
+router.get('/ai/credits', requireAuth, async (req, res) => {
+    try {
+        const creditsInfo = await aiCreditManager.getUserCredits(req.user.id);
+        res.json(creditsInfo);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/ai/usage-history', requireAuth, async (req, res) => {
+    try {
+        const history = await aiCreditManager.getUsageHistory(req.user.id);
+        res.json(history);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/ai/process', requireAuth, async (req, res) => {
+    try {
+        const { operation, text, targetLanguage, count } = req.body;
+        if (!text) {
+            return res.status(400).json({ error: 'Text content is required for AI processing.' });
+        }
+
+        // Deduct 1 credit (or check sufficiency)
+        const creditResult = await aiCreditManager.deductCredits(req.user.id, operation, 1);
+
+        // Process text via AI Service (model parameter ignored/hidden from user)
+        const result = await aiService.processText({ operation, text, targetLanguage, count });
+
+        res.json({
+            success: true,
+            ...result,
+            remainingCredits: creditResult.remainingCredits,
+            resetDate: creditResult.resetDate
+        });
+    } catch (error) {
+        console.error('Error processing AI text:', error.message);
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({ error: error.message });
+    }
+});
+
+// ── Queue Jobs & Telemetry ───────────────────────────────────────────────────
+const { jobQueue } = require('../queue');
+
+router.get('/jobs', requireAuth, async (req, res) => {
+    try {
+        const db = await require('../models/database').getDb();
+        let jobs = [];
+        if (req.user.is_admin) {
+            jobs = await db.all('SELECT * FROM jobs ORDER BY id DESC LIMIT 100');
+        } else {
+            jobs = await db.all('SELECT * FROM jobs WHERE user_id = ? ORDER BY id DESC LIMIT 100', [req.user.id]);
+        }
+        res.json(jobs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/jobs/:id/logs', requireAuth, async (req, res) => {
+    try {
+        const logs = await jobQueue.getJobLogsGrouped(req.params.id);
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/jobs/:id/retry', requireAuth, async (req, res) => {
+    try {
+        const result = await jobQueue.retryJob(req.params.id);
+        res.json(result);
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
@@ -217,14 +346,15 @@ router.get('/diagnostics', requireAuth, async (req, res) => {
         const { initDb } = require('../models/database');
         const db = await initDb();
         const announcementsCount = await db.get('SELECT COUNT(*) as count FROM announcements WHERE user_id = ?', [req.user.id]);
-        const profilesCount = await db.get('SELECT COUNT(*) as count FROM posting_profiles WHERE user_id = ?', [req.user.id]);
+        const listsCount = await db.get('SELECT COUNT(*) as count FROM audience_lists WHERE user_id = ?', [req.user.id]);
         const logsCount = await db.get('SELECT COUNT(*) as count FROM activity_logs WHERE user_id = ?', [req.user.id]);
         
         res.json({
             whatsappStatus: waClient.getStatus(),
             database: {
                 announcements: announcementsCount.count,
-                profiles: profilesCount.count,
+                audienceLists: listsCount.count,
+                profiles: listsCount.count,
                 logs: logsCount.count
             },
             env: {
@@ -264,11 +394,33 @@ router.get('/logs', requireAuth, async (req, res) => {
     }
 });
 
-// ── Posting Profiles ─────────────────────────────────────────────────────────
-router.get('/profiles', requireAuth, requireSubscription, profileController.list);
-router.post('/profiles', requireAuth, requireSubscription, profileController.create);
-router.put('/profiles/:id', requireAuth, requireSubscription, profileController.update);
-router.delete('/profiles/:id', requireAuth, requireSubscription, profileController.delete);
+// ── Contacts ──────────────────────────────────────────────────────────────────
+router.get('/contacts', requireAuth, requireSubscription, contactController.list);
+router.get('/contacts/:id', requireAuth, requireSubscription, contactController.get);
+router.post('/contacts', requireAuth, requireSubscription, contactController.create);
+router.post('/contacts/import', requireAuth, requireSubscription, contactController.importBulk);
+router.put('/contacts/:id', requireAuth, requireSubscription, contactController.update);
+router.delete('/contacts/:id', requireAuth, requireSubscription, contactController.delete);
+
+// ── Contact Lists ─────────────────────────────────────────────────────────────
+router.get('/contact-lists', requireAuth, requireSubscription, contactListController.list);
+router.get('/contact-lists/:id', requireAuth, requireSubscription, contactListController.get);
+router.post('/contact-lists', requireAuth, requireSubscription, contactListController.create);
+router.put('/contact-lists/:id', requireAuth, requireSubscription, contactListController.update);
+router.delete('/contact-lists/:id', requireAuth, requireSubscription, contactListController.delete);
+
+// ── Audience Lists ────────────────────────────────────────────────────────────
+router.get('/audience-lists', requireAuth, requireSubscription, audienceListController.list);
+router.get('/audience-lists/:id', requireAuth, requireSubscription, audienceListController.get);
+router.post('/audience-lists', requireAuth, requireSubscription, audienceListController.create);
+router.put('/audience-lists/:id', requireAuth, requireSubscription, audienceListController.update);
+router.delete('/audience-lists/:id', requireAuth, requireSubscription, audienceListController.delete);
+
+// Backward-compatibility aliases
+router.get('/profiles', requireAuth, requireSubscription, audienceListController.list);
+router.post('/profiles', requireAuth, requireSubscription, audienceListController.create);
+router.put('/profiles/:id', requireAuth, requireSubscription, audienceListController.update);
+router.delete('/profiles/:id', requireAuth, requireSubscription, audienceListController.delete);
 
 // ── SaaS User Management (Admin Only) ─────────────────────────────────────────
 router.get('/admin/users', requireAuth, requireAdmin, adminController.listUsers);
@@ -281,5 +433,10 @@ router.get('/admin/plans', requireAuth, requireAdmin, planController.listAllPlan
 router.post('/admin/plans', requireAuth, requireAdmin, planController.createPlan);
 router.put('/admin/plans/:id', requireAuth, requireAdmin, planController.updatePlan);
 router.delete('/admin/plans/:id', requireAuth, requireAdmin, planController.deletePlan);
+
+// ── Super Admin AI Control Center ─────────────────────────────────────────────
+router.get('/admin/ai-dashboard', requireAuth, requireAdmin, adminController.getAIDashboardStats);
+router.post('/admin/ai-settings', requireAuth, requireAdmin, adminController.updateAISettings);
+router.get('/admin/ai-request-logs', requireAuth, requireAdmin, adminController.getAIRequestLogs);
 
 module.exports = router;

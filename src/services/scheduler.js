@@ -22,7 +22,11 @@ async function scheduleAnnouncementChecker() {
         await checkAndSendDue();
     }, 30000); // 30-second delay on startup
 
-    console.log('[Scheduler] Announcement checker initialized (every 30 minutes).');
+    // Start background Queue Worker engine
+    const { queueWorker } = require('../queue');
+    queueWorker.start();
+
+    console.log('[Scheduler] Announcement checker and Queue Worker initialized.');
 }
 
 async function getTimezone() {
@@ -106,8 +110,42 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     let targetGroups = [];
     try { targetGroups = JSON.parse(ann.target_groups || '[]'); } catch { targetGroups = []; }
 
-    if (targetGroups.length === 0) {
-        const msg = `[Scheduler] Announcement "${ann.title}" has no target groups configured. Skipping.`;
+    let targetContacts = [];
+    try { targetContacts = JSON.parse(ann.target_contacts || '[]'); } catch { targetContacts = []; }
+
+    let contactListIds = [];
+    try { contactListIds = JSON.parse(ann.target_contact_lists || '[]'); } catch { contactListIds = []; }
+
+    let audienceListIds = [];
+    try { audienceListIds = JSON.parse(ann.target_audience_lists || '[]'); } catch { audienceListIds = []; }
+
+    const includeStatus = Boolean(ann.include_status);
+
+    // Expand Audience Lists into Groups and Contact Lists
+    if (audienceListIds.length > 0) {
+        for (const audId of audienceListIds) {
+            const audRow = await db.get('SELECT groups, contact_list_ids FROM audience_lists WHERE id = ?', [audId]);
+            if (audRow) {
+                try {
+                    const gList = JSON.parse(audRow.groups || '[]');
+                    targetGroups.push(...gList);
+                } catch {}
+                try {
+                    const cList = JSON.parse(audRow.contact_list_ids || '[]');
+                    contactListIds.push(...cList);
+                } catch {}
+            }
+        }
+    }
+
+    // Deduplicate
+    targetGroups = [...new Set(targetGroups)];
+    contactListIds = [...new Set(contactListIds)];
+    targetContacts = [...new Set(targetContacts)];
+
+    const hasTargets = targetGroups.length > 0 || targetContacts.length > 0 || contactListIds.length > 0 || includeStatus;
+    if (!hasTargets) {
+        const msg = `[Scheduler] Announcement "${ann.title}" has no target destinations configured. Skipping.`;
         console.warn(msg);
         emitLog(ann.user_id, { type: 'warning', message: msg, timestamp: new Date().toISOString() });
         return;
@@ -194,44 +232,30 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         console.error('[Scheduler] Failed to get send_delay_seconds settings:', err);
     }
 
-    // Fetch group details to map JID to Name
-    let groupMap = {};
-    try {
-        const chats = await waClient.getChats(senderJid);
-        if (Array.isArray(chats)) {
-            chats.forEach(chat => {
-                if (chat.id) {
-                    groupMap[chat.id] = chat.name;
-                }
-            });
-        }
-    } catch (err) {
-        console.error('[Scheduler] Failed to fetch group chats for naming map:', err);
-    }
+    // Enqueue announcement dispatch job into JobQueue for asynchronous QueueWorker execution
+    const { jobQueue } = require('../queue');
+    const jobId = await jobQueue.enqueue(
+        'announcement_dispatch',
+        {
+            announcementId: ann.id,
+            announcementTitle: ann.title,
+            mediaEntry,
+            caption,
+            captionVariations,
+            captionIndex: ann.caption_index || 0,
+            targetGroups,
+            contactListIds,
+            audienceListIds,
+            includeStatus,
+            senderJid,
+            userId: ann.user_id,
+            sendDelayMs
+        },
+        ann.user_id,
+        3
+    );
 
-    // Send to ALL target groups sequentially with a delay to prevent timeouts/congestion
-    const sendResults = [];
-    for (const groupId of targetGroups) {
-        const groupName = groupMap[groupId] || groupId;
-        try {
-            await sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap, 2, senderJid, ann.user_id);
-            sendResults.push({ status: 'fulfilled' });
-        } catch (err) {
-            sendResults.push({ status: 'rejected', reason: err });
-            // Log specific error message to DB
-            await logActivity('announcement_error', `Failed to send to group "${groupName}" (${groupId}): ${err.message}`);
-        }
-        // Configurable delay between sending to groups to avoid rate-limiting and timeouts
-        await new Promise(resolve => setTimeout(resolve, sendDelayMs));
-    }
-
-    const succeeded = sendResults.filter(r => r.status === 'fulfilled').length;
-    const failed = sendResults.filter(r => r.status === 'rejected').length;
-
-    const logMsg = `Announcement "${ann.title}" sent to ${succeeded}/${targetGroups.length} group(s)${failed > 0 ? ` (${failed} failed)` : ''}.`;
-    console.log('[Scheduler]', logMsg);
-    emitLog(ann.user_id, { type: failed > 0 ? 'warning' : 'success', message: logMsg, timestamp: new Date().toISOString() });
-    await logActivity('announcement_posted', logMsg, ann.user_id);
+    console.log(`[Scheduler] Announcement "${ann.title}" enqueued into Job #${jobId}.`);
 
     // Send email notification to user
     if (ann.user_id) {
