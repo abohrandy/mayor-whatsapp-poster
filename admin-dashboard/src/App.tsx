@@ -114,7 +114,7 @@ function App() {
       case 'activity': return <ActivityLogs />;
       case 'jobs': return <JobQueueView />;
       case 'whatsapp': return <WhatsAppStatus />;
-      case 'settings': return <Settings />;
+      case 'settings': return <Settings user={user} />;
       case 'users': return <UserManagement />;
       case 'plans': return <PlanManagement />;
       case 'ai-control': return <AdminAIDashboard />;

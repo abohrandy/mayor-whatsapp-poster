@@ -41,7 +41,11 @@ const LANGUAGES = [
   'Hausa'
 ];
 
-const Settings = () => {
+interface SettingsProps {
+  user?: any;
+}
+
+const Settings = ({ user: propsUser }: SettingsProps) => {
   const [activeTab, setActiveTab] = useState<'automation' | 'ai' | 'notifications' | 'test' | 'security'>('automation');
   const [settings, setSettings] = useState({
     timezone: 'Africa/Lagos',
@@ -67,7 +71,7 @@ const Settings = () => {
     confirm_password: ''
   });
 
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(propsUser || null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPass, setChangingPass] = useState(false);
@@ -103,6 +107,8 @@ const Settings = () => {
 
       if (meRes?.data?.user) {
         setUserProfile(meRes.data.user);
+      } else if (propsUser) {
+        setUserProfile(propsUser);
       }
     } catch {
       setMessage({ type: 'error', text: 'Failed to load settings.' });
@@ -173,12 +179,15 @@ const Settings = () => {
     );
   }
 
+  const currentUserEmail = userProfile?.email || propsUser?.email || 'Logged In User';
+  const currentUserTier = userProfile?.tier || propsUser?.tier || userProfile?.subscription_status || 'Active';
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header & Sub-Navigation */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-slate-800 pb-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white flex items-center gap-2">
             <Sliders className="text-indigo-400" size={26} /> System &amp; Account Settings
           </h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -186,44 +195,49 @@ const Settings = () => {
           </p>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+        {/* Tab Buttons (Responsive Wrapping) */}
+        <div className="flex flex-wrap bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 gap-1.5 w-full xl:w-auto">
           <button
+            type="button"
             onClick={() => setActiveTab('automation')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'automation' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              activeTab === 'automation' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Clock size={14} /> Automation
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('ai')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'ai' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              activeTab === 'ai' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Sparkles size={14} /> AI Writing
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('notifications')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'notifications' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              activeTab === 'notifications' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Bell size={14} /> Alerts &amp; Webhooks
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('test')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'test' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              activeTab === 'test' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <MessageCircle size={14} /> Bridge Test
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('security')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'security' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              activeTab === 'security' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Shield size={14} /> Account &amp; Security
@@ -543,11 +557,11 @@ const Settings = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <span className="text-slate-400 block">Account Email:</span>
-                <span className="text-white font-bold">{userProfile?.email || 'Current User'}</span>
+                <span className="text-white font-bold">{currentUserEmail}</span>
               </div>
               <div>
                 <span className="text-slate-400 block">Subscription Tier:</span>
-                <span className="text-indigo-300 font-bold uppercase">{userProfile?.tier || 'Active'}</span>
+                <span className="text-indigo-300 font-bold uppercase">{currentUserTier}</span>
               </div>
             </div>
           </div>
