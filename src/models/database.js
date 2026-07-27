@@ -203,6 +203,15 @@ async function initDb() {
         )
     `);
 
+    // Clean up any improperly cross-synced contacts tagged with 'whatsapp_synced' where user_id does not own a connected session
+    try {
+        await db.exec(`
+            DELETE FROM contacts 
+            WHERE tags LIKE '%whatsapp_synced%' 
+            AND user_id NOT IN (SELECT user_id FROM whatsapp_sessions WHERE session_id IS NOT NULL AND session_id != '')
+        `);
+    } catch (err) {}
+
     // Subscription Plans table
     await db.exec(`
         CREATE TABLE IF NOT EXISTS subscription_plans (

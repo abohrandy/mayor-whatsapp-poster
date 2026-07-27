@@ -70,6 +70,10 @@ router.post('/whatsapp/sync-contacts', requireAuth, requireSubscription, async (
             if (first) targetSessionJid = first.session_id;
         }
 
+        if (!targetSessionJid) {
+            return res.status(400).json({ error: 'No active WhatsApp session found for your account. Please link your WhatsApp first.' });
+        }
+
         const result = await waClient.syncContacts(targetSessionJid, req.user.id);
         res.json({ message: 'WhatsApp contacts sync completed', ...result });
     } catch (error) {

@@ -356,24 +356,17 @@ func handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 
 func handleGroups(w http.ResponseWriter, r *http.Request) {
 	from := r.URL.Query().Get("from")
-	
-	sessionsMu.RLock()
-	var selectedSess *ClientSession
-	if from != "" {
-		selectedSess = sessions[from]
-	} else {
-		// Default to the first CONNECTED session
-		for _, s := range sessions {
-			if s.Status == "CONNECTED" {
-				selectedSess = s
-				break
-			}
-		}
+	if from == "" {
+		http.Error(w, "Session ID parameter 'from' is required", http.StatusBadRequest)
+		return
 	}
+
+	sessionsMu.RLock()
+	selectedSess := sessions[from]
 	sessionsMu.RUnlock()
 
 	if selectedSess == nil || selectedSess.Client == nil {
-		http.Error(w, "No connected WhatsApp sessions found", http.StatusServiceUnavailable)
+		http.Error(w, "Session not found or not connected", http.StatusNotFound)
 		return
 	}
 
@@ -404,23 +397,17 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 
 func handleContacts(w http.ResponseWriter, r *http.Request) {
 	from := r.URL.Query().Get("from")
+	if from == "" {
+		http.Error(w, "Session ID parameter 'from' is required", http.StatusBadRequest)
+		return
+	}
 
 	sessionsMu.RLock()
-	var selectedSess *ClientSession
-	if from != "" {
-		selectedSess = sessions[from]
-	} else {
-		for _, s := range sessions {
-			if s.Status == "CONNECTED" {
-				selectedSess = s
-				break
-			}
-		}
-	}
+	selectedSess := sessions[from]
 	sessionsMu.RUnlock()
 
 	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Client.Store == nil {
-		http.Error(w, "No connected WhatsApp sessions found", http.StatusServiceUnavailable)
+		http.Error(w, "Session not found or not connected", http.StatusNotFound)
 		return
 	}
 

@@ -164,8 +164,8 @@ class WhatsAppService {
      * @param {number} userId - User ID owning the session
      */
     async syncContacts(sessionJid = null, userId = null) {
-        if (!userId) {
-            console.warn('[WhatsAppService] syncContacts called without userId');
+        if (!userId || !sessionJid) {
+            console.warn('[WhatsAppService] syncContacts called without valid userId or sessionJid');
             return { count: 0, lastSyncedAt: null };
         }
 
