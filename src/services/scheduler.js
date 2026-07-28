@@ -5,28 +5,56 @@ const waClient = require('./whatsapp');
 const { emitLog } = require('./socket');
 const { sendAnnouncementPostedEmail } = require('./email');
 
+function computeNextPostAt(postTimeStr = '08:00', isRecurring = 0, recurrenceDays = 1, daysOfWeek = []) {
+    const now = new Date();
+    let target = new Date();
+
+    const [h, m] = (postTimeStr || '08:00').split(':').map(Number);
+    target.setHours(h || 0, m || 0, 0, 0);
+
+    if (target <= now) {
+        if (Array.isArray(daysOfWeek) && daysOfWeek.length > 0) {
+            let found = false;
+            for (let i = 1; i <= 7; i++) {
+                const temp = new Date(target);
+                temp.setDate(temp.getDate() + i);
+                if (daysOfWeek.includes(temp.getDay())) {
+                    target = temp;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) target.setDate(target.getDate() + 1);
+        } else {
+            const days = recurrenceDays ? parseInt(recurrenceDays) : 1;
+            target.setDate(target.getDate() + (isRecurring ? days : 0));
+        }
+    }
+
+    return target.toISOString();
+}
+
 /**
- * Schedule the announcement checker to run every 3 hours.
+ * Schedule the announcement checker to run every 1 minute.
  * Also runs once on startup to catch any missed posts.
  */
 async function scheduleAnnouncementChecker() {
-    // Run every 30 minutes
-    cron.schedule('*/30 * * * *', async () => {
-        console.log('[Scheduler] Running 30-minute announcement check...');
+    // Run every 1 minute for precise scheduled post delivery
+    cron.schedule('* * * * *', async () => {
         await checkAndSendDue();
     }, { timezone: await getTimezone() });
 
-    // Also run at startup after a short delay (let WA client connect first)
+    // Run at startup after a short delay
     setTimeout(async () => {
         console.log('[Scheduler] Running startup announcement check...');
         await checkAndSendDue();
-    }, 30000); // 30-second delay on startup
+    }, 5000);
 
     // Start background Queue Worker engine
     const { queueWorker } = require('../queue');
     queueWorker.start();
 
-    console.log('[Scheduler] Announcement checker and Queue Worker initialized.');
+    console.log('[Scheduler] Announcement checker (1-min interval) and Queue Worker initialized.');
 }
 
 async function getTimezone() {
@@ -46,15 +74,25 @@ async function checkAndSendDue() {
     try {
         const db = await getDb();
         const now = new Date();
+        const nowIso = now.toISOString();
 
-        // Fetch all active announcements where next_post_at is due or null (one-time with no schedule)
+        // 1. Auto-heal any active announcements with missing/null next_post_at
+        const unassigned = await db.all("SELECT * FROM announcements WHERE status = 'active' AND (next_post_at IS NULL OR next_post_at = '')");
+        for (const ann of unassigned) {
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
+            const computedNext = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
+            await db.run("UPDATE announcements SET next_post_at = ? WHERE id = ?", [computedNext, ann.id]);
+            console.log(`[Scheduler] Auto-healed announcement #${ann.id} ("${ann.title}") next_post_at -> ${computedNext}`);
+        }
+
+        // 2. Fetch all active announcements where next_post_at is due or past
         const announcements = await db.all(
             `SELECT * FROM announcements WHERE status = 'active' AND next_post_at IS NOT NULL AND next_post_at <= ?`,
-            [now.toISOString()]
+            [nowIso]
         );
 
         if (announcements.length === 0) {
-            console.log('[Scheduler] No announcements due at this time.');
             return;
         }
 
@@ -81,7 +119,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     if (!senderJid) {
         try {
             const userSession = await db.get(
-                "SELECT session_id FROM whatsapp_sessions WHERE user_id = ?",
+                "SELECT session_id FROM whatsapp_sessions WHERE user_id = ? LIMIT 1",
                 [ann.user_id]
             );
             if (userSession) {
@@ -94,13 +132,16 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     }
 
     if (!senderJid) {
-        const msg = `[Scheduler] Announcement "${ann.title}" has no linked sender WhatsApp account. Skipping.`;
+        const msg = `[Scheduler] Announcement "${ann.title}" has no linked sender WhatsApp account. Please link WhatsApp on Status page.`;
         console.warn(msg);
-        emitLog(ann.user_id, { type: 'error', message: msg, timestamp: new Date().toISOString() });
-        await logActivity('announcement_error', msg, ann.user_id);
+        emitLog(ann.user_id, { type: 'warning', message: msg, timestamp: new Date().toISOString() });
+        await logActivity('announcement_warning', msg, ann.user_id);
         
-        // Disable announcement so it does not loop infinitely
-        await db.run(`UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`, [ann.id]);
+        // Recalculate next_post_at to check again tomorrow instead of deactivating permanently
+        let daysOfWeek = [];
+        try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
+        const nextTry = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
+        await db.run(`UPDATE announcements SET next_post_at = ? WHERE id = ?`, [nextTry, ann.id]);
         return;
     }
 
@@ -174,49 +215,11 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         emitLog(ann.user_id, { type: 'error', message: errMsg, timestamp: new Date().toISOString() });
         await logActivity('announcement_error', errMsg, ann.user_id);
         
-        // If it's a scheduled recurring post, advance it to avoid getting stuck, or mark inactive if one-time
         if (advanceRibbon) {
-            if (ann.is_recurring) {
-                const nextRibbonIdx = mediaFiles.length > 1 ? (ribbonIdx + 1) % mediaFiles.length : 0;
-                let nextCaptionIdx = 0;
-                if (captionVariations.length > 1) {
-                    const captionIdx = ann.caption_index || 0;
-                    nextCaptionIdx = (captionIdx + 1) % captionVariations.length;
-                }
-                
-                let daysOfWeek = [];
-                try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
-                const nextPostAt = new Date();
-                if (ann.post_time) {
-                    const [h, m] = ann.post_time.split(':').map(Number);
-                    nextPostAt.setHours(h, m, 0, 0);
-                }
-                if (daysOfWeek.length > 0) {
-                    let found = false;
-                    for (let i = 1; i <= 7; i++) {
-                        const tempDate = new Date(nextPostAt);
-                        tempDate.setDate(tempDate.getDate() + i);
-                        if (daysOfWeek.includes(tempDate.getDay())) {
-                            nextPostAt.setDate(nextPostAt.getDate() + i);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) nextPostAt.setDate(nextPostAt.getDate() + 1);
-                } else {
-                    const recurrenceDays = ann.recurrence_days || 1;
-                    nextPostAt.setDate(nextPostAt.getDate() + recurrenceDays);
-                }
-                await db.run(
-                    'UPDATE announcements SET ribbon_index = ?, caption_index = ?, next_post_at = ? WHERE id = ?',
-                    [nextRibbonIdx, nextCaptionIdx, nextPostAt.toISOString(), ann.id]
-                );
-            } else {
-                await db.run(
-                    `UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`,
-                    [ann.id]
-                );
-            }
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
+            const nextPostAt = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
+            await db.run('UPDATE announcements SET next_post_at = ? WHERE id = ?', [nextPostAt, ann.id]);
         }
         return;
     }
@@ -262,7 +265,7 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         try {
             const userRow = await db.get('SELECT email FROM users WHERE id = ?', [ann.user_id]);
             if (userRow && userRow.email) {
-                sendAnnouncementPostedEmail(userRow.email, ann.title, targetGroups.length, failed)
+                sendAnnouncementPostedEmail(userRow.email, ann.title, targetGroups.length, 0)
                     .catch(err => console.error('[Scheduler] Announcement email error:', err));
             }
         } catch (err) {
@@ -270,60 +273,27 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         }
     }
 
-    if (succeeded > 0) {
-        const { logPostContent } = require('./antiSpam');
-        await logPostContent(ann.user_id, caption);
-    }
+    const { logPostContent } = require('./antiSpam');
+    await logPostContent(ann.user_id, caption);
 
     if (advanceRibbon) {
         if (ann.is_recurring) {
-            // Advance ribbon index (cycle through media files)
             const nextRibbonIdx = mediaFiles.length > 1 ? (ribbonIdx + 1) % mediaFiles.length : 0;
-
-            // Advance caption index (cycle through text variations)
             let nextCaptionIdx = 0;
             if (captionVariations.length > 1) {
                 const captionIdx = ann.caption_index || 0;
                 nextCaptionIdx = (captionIdx + 1) % captionVariations.length;
             }
 
-            // Recalculate next_post_at: specific days of week OR now + recurrence_days
             let daysOfWeek = [];
             try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
-
-            const nextPostAt = new Date();
-            // Keep the same time-of-day
-            if (ann.post_time) {
-                const [h, m] = ann.post_time.split(':').map(Number);
-                nextPostAt.setHours(h, m, 0, 0);
-            }
-
-            if (daysOfWeek.length > 0) {
-                // Find next day of week matching selected days (starting tomorrow)
-                let found = false;
-                for (let i = 1; i <= 7; i++) {
-                    const tempDate = new Date(nextPostAt);
-                    tempDate.setDate(tempDate.getDate() + i);
-                    if (daysOfWeek.includes(tempDate.getDay())) {
-                        nextPostAt.setDate(nextPostAt.getDate() + i);
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    nextPostAt.setDate(nextPostAt.getDate() + 1);
-                }
-            } else {
-                const recurrenceDays = ann.recurrence_days || 1;
-                nextPostAt.setDate(nextPostAt.getDate() + recurrenceDays);
-            }
+            const nextPostAt = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
 
             await db.run(
                 'UPDATE announcements SET ribbon_index = ?, caption_index = ?, next_post_at = ? WHERE id = ?',
-                [nextRibbonIdx, nextCaptionIdx, nextPostAt.toISOString(), ann.id]
+                [nextRibbonIdx, nextCaptionIdx, nextPostAt, ann.id]
             );
         } else {
-            // One-time: mark inactive
             await db.run(
                 `UPDATE announcements SET status = 'inactive', next_post_at = NULL WHERE id = ?`,
                 [ann.id]
@@ -332,56 +302,4 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     }
 }
 
-/**
- * Send to group with retry support and exponential backoff on rate limiting (error 420).
- */
-async function sendToGroupWithRetry(groupId, mediaEntry, caption, groupMap = {}, maxRetries = 2, from = null, userId = null) {
-    let attempt = 0;
-    let delay = 3000; // start with 3 seconds retry delay on error
-    const groupName = groupMap[groupId] || groupId;
-    while (attempt < maxRetries) {
-        try {
-            await sendToGroup(groupId, mediaEntry, caption, from, userId);
-            return; // success!
-        } catch (err) {
-            attempt++;
-            const isRateLimit = err.message && (err.message.includes('420') || err.message.toLowerCase().includes('rate limit'));
-            
-            if (isRateLimit && attempt < maxRetries) {
-                const waitSec = Math.round(delay / 1000);
-                console.warn(`[Scheduler] Rate limited (420) sending to group "${groupName}" (${groupId}). Attempt ${attempt}/${maxRetries}. Retrying in ${waitSec}s...`);
-                await logActivity('announcement_error', `Rate limited (420) sending to group "${groupName}" (${groupId}). Retrying in ${waitSec}s... (Attempt ${attempt}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2.5; // increase retry delay exponentially
-            } else {
-                if (attempt < maxRetries) {
-                    console.warn(`[Scheduler] Error sending to group "${groupName}" (${groupId}). Attempt ${attempt}/${maxRetries}. Retrying in 2s... Error: ${err.message}`);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                } else {
-                    throw err; // throw last error if max retries exceeded
-                }
-            }
-        }
-    }
-}
-
-/**
- * Send a media file (or text-only) to a single WhatsApp group.
- */
-async function sendToGroup(groupId, mediaEntry, caption, from = null, userId = null) {
-    try {
-        if (mediaEntry && mediaEntry.path) {
-            await waClient.sendMedia(groupId, mediaEntry.path, caption, mediaEntry.type || 'image', from);
-        } else {
-            await waClient.sendTextMessage(groupId, caption, from);
-        }
-        console.log(`[Scheduler] Sent to ${groupId} via ${from || 'default'} ✓`);
-    } catch (err) {
-        const msg = `Failed to send to ${groupId} via ${from || 'default'}: ${err.message}`;
-        console.error('[Scheduler]', msg);
-        emitLog(userId, { type: 'error', message: msg, timestamp: new Date().toISOString() });
-        throw err;
-    }
-}
-
-module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement };
+module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement, computeNextPostAt };

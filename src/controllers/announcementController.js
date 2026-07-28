@@ -94,22 +94,17 @@ const announcementController = {
                 });
             }
 
-            // Calculate next_post_at
-            let nextPostAt = null;
-            if (next_post_at) {
-                nextPostAt = next_post_at;
-            } else if (!parseInt(is_recurring) && post_time) {
-                // one-time: use today + post_time if no explicit datetime given
-                nextPostAt = null;
-            }
+            // Parse recurrence_days_of_week
+            let daysOfWeek = [];
+            try { daysOfWeek = JSON.parse(recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
+
+            // Calculate next_post_at automatically if not explicitly provided
+            const { computeNextPostAt } = require('../services/scheduler');
+            let nextPostAt = next_post_at || computeNextPostAt(post_time || '08:00', parseInt(is_recurring) || 0, recurrence_days, daysOfWeek);
 
             // Parse caption_variations
             let variations = [];
             try { variations = JSON.parse(caption_variations || '[]'); } catch { variations = []; }
-
-            // Parse recurrence_days_of_week
-            let daysOfWeek = [];
-            try { daysOfWeek = JSON.parse(recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
 
             const db = await initDb();
             const result = await db.run(
@@ -217,6 +212,9 @@ const announcementController = {
             let daysOfWeek = [];
             try { daysOfWeek = JSON.parse(recurrence_days_of_week || '[]'); } catch { daysOfWeek = []; }
 
+            const { computeNextPostAt } = require('../services/scheduler');
+            let computedNextPostAt = next_post_at || computeNextPostAt(post_time || '08:00', parseInt(is_recurring) || 0, recurrence_days, daysOfWeek);
+
             await db.run(
                 `UPDATE announcements
                  SET title = ?, caption = ?, caption_variations = ?, media_files = ?, is_recurring = ?,
@@ -239,7 +237,7 @@ const announcementController = {
                     JSON.stringify(contactLists),
                     JSON.stringify(audienceLists),
                     incStatus,
-                    next_post_at || null,
+                    computedNextPostAt,
                     id,
                     req.user.id
                 ]
@@ -295,11 +293,20 @@ const announcementController = {
         try {
             const { id } = req.params;
             const db = await initDb();
-            const ann = await db.get('SELECT status FROM announcements WHERE id = ? AND user_id = ?', [id, req.user.id]);
+            const ann = await db.get('SELECT * FROM announcements WHERE id = ? AND user_id = ?', [id, req.user.id]);
             if (!ann) return res.status(404).json({ error: 'Not found.' });
             const newStatus = ann.status === 'active' ? 'inactive' : 'active';
-            await db.run('UPDATE announcements SET status = ? WHERE id = ? AND user_id = ?', [newStatus, id, req.user.id]);
-            res.json({ id, status: newStatus });
+            
+            let nextPostAt = ann.next_post_at;
+            if (newStatus === 'active') {
+                const { computeNextPostAt } = require('../services/scheduler');
+                let daysOfWeek = [];
+                try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
+                nextPostAt = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
+            }
+
+            await db.run('UPDATE announcements SET status = ?, next_post_at = ? WHERE id = ? AND user_id = ?', [newStatus, nextPostAt, id, req.user.id]);
+            res.json({ id, status: newStatus, next_post_at: nextPostAt });
         } catch (error) {
             res.status(500).json({ error: 'Internal server error.' });
         }
