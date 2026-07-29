@@ -39,18 +39,15 @@ function computeNextPostAt(postTimeStr = '08:00', isRecurring = 0, recurrenceDay
  * Also runs once on startup to catch any missed posts.
  */
 async function scheduleAnnouncementChecker() {
-    // Run every 1 minute for precise scheduled post delivery
     cron.schedule('* * * * *', async () => {
         await checkAndSendDue();
     }, { timezone: await getTimezone() });
 
-    // Run at startup after a short delay
     setTimeout(async () => {
         console.log('[Scheduler] Running startup announcement check...');
         await checkAndSendDue();
-    }, 5000);
+    }, 3000);
 
-    // Start background Queue Worker engine
     const { queueWorker } = require('../queue');
     queueWorker.start();
 
@@ -86,20 +83,37 @@ async function checkAndSendDue() {
             console.log(`[Scheduler] Auto-healed announcement #${ann.id} ("${ann.title}") next_post_at -> ${computedNext}`);
         }
 
-        // 2. Fetch all active announcements where next_post_at is due or past
-        const announcements = await db.all(
-            `SELECT * FROM announcements WHERE status = 'active' AND next_post_at IS NOT NULL AND next_post_at <= ?`,
-            [nowIso]
-        );
+        // 2. Fetch active announcements and check if due by next_post_at OR morning post_time catch-up
+        const announcements = await db.all("SELECT * FROM announcements WHERE status = 'active'");
 
-        if (announcements.length === 0) {
+        const dueList = [];
+        const todayStr = nowIso.slice(0, 10);
+        const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        for (const ann of announcements) {
+            let isDue = false;
+            if (ann.next_post_at && ann.next_post_at <= nowIso) {
+                isDue = true;
+            } else if (ann.post_time && ann.post_time <= currentHHMM) {
+                const lastPostedDay = ann.last_posted_at ? ann.last_posted_at.slice(0, 10) : null;
+                if (lastPostedDay !== todayStr) {
+                    isDue = true;
+                }
+            }
+
+            if (isDue) {
+                dueList.push(ann);
+            }
+        }
+
+        if (dueList.length === 0) {
             return;
         }
 
-        console.log(`[Scheduler] Found ${announcements.length} due announcement(s).`);
+        console.log(`[Scheduler] Found ${dueList.length} due announcement(s).`);
 
-        for (const ann of announcements) {
-            await sendAnnouncement(ann, true); // true = advance ribbon + recalculate next_post_at
+        for (const ann of dueList) {
+            await sendAnnouncement(ann, true);
         }
     } catch (error) {
         console.error('[Scheduler] Error in checkAndSendDue:', error);
@@ -124,7 +138,20 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
             );
             if (userSession) {
                 senderJid = userSession.session_id;
-                console.log(`[Scheduler] Resolved empty sender_jid for announcement "${ann.title}" (user ${ann.user_id}) to: ${senderJid}`);
+            } else {
+                // Try retrieving active session from waClient directly
+                const status = await waClient.getStatus();
+                if (status && status.sessions && status.sessions.length > 0) {
+                    const connSess = status.sessions.find(s => s.status === 'CONNECTED') || status.sessions[0];
+                    if (connSess) {
+                        senderJid = connSess.id;
+                        await db.run(
+                            "INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)",
+                            [ann.user_id || 1, senderJid]
+                        );
+                        console.log(`[Scheduler] Auto-bound active bridge session ${senderJid} to user ${ann.user_id || 1}`);
+                    }
+                }
             }
         } catch (sessErr) {
             console.error('[Scheduler] Failed to resolve user session JID:', sessErr);
@@ -137,7 +164,6 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         emitLog(ann.user_id, { type: 'warning', message: msg, timestamp: new Date().toISOString() });
         await logActivity('announcement_warning', msg, ann.user_id);
         
-        // Recalculate next_post_at to check again tomorrow instead of deactivating permanently
         let daysOfWeek = [];
         try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
         const nextTry = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
@@ -259,6 +285,10 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     );
 
     console.log(`[Scheduler] Announcement "${ann.title}" enqueued into Job #${jobId}.`);
+
+    // Update last_posted_at
+    const nowIso = new Date().toISOString();
+    await db.run('UPDATE announcements SET last_posted_at = ? WHERE id = ?', [nowIso, ann.id]);
 
     // Send email notification to user
     if (ann.user_id) {

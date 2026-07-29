@@ -343,6 +343,13 @@ async function initDb() {
         }
     }
 
+    if (!annColumns.some(col => col.name === 'last_posted_at')) {
+        try {
+            await db.exec("ALTER TABLE announcements ADD COLUMN last_posted_at DATETIME DEFAULT NULL");
+            console.log('Migrated announcements table: added last_posted_at column.');
+        } catch (err) {}
+    }
+
     const hasAnnUserId = annColumns.some(col => col.name === 'user_id');
     if (!hasAnnUserId) {
         try {

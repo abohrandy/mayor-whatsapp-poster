@@ -158,6 +158,17 @@ router.post('/ai/process', requireAuth, async (req, res) => {
 // ── Queue Jobs & Telemetry ───────────────────────────────────────────────────
 const { jobQueue } = require('../queue');
 
+router.post('/announcements/trigger-due', requireAuth, async (req, res) => {
+    try {
+        const { checkAndSendDue } = require('../services/scheduler');
+        await checkAndSendDue();
+        res.json({ message: 'Checked and triggered due announcements successfully.' });
+    } catch (error) {
+        console.error('Error triggering due announcements:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/jobs', requireAuth, async (req, res) => {
     try {
         const db = await require('../models/database').getDb();
