@@ -534,20 +534,7 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionsMu.RLock()
-	var selectedSess *ClientSession
-	if req.From != "" {
-		selectedSess = sessions[req.From]
-	} else {
-		// Use first connected
-		for _, s := range sessions {
-			if s.Status == "CONNECTED" {
-				selectedSess = s
-				break
-			}
-		}
-	}
-	sessionsMu.RUnlock()
+	selectedSess := findSession(req.From)
 
 	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Status != "CONNECTED" {
 		http.Error(w, "Target WhatsApp session is not connected", http.StatusServiceUnavailable)
