@@ -95,4 +95,6 @@ class DestinationEngine {
     }
 }
 
-module.exports = DestinationEngine;
+const destinationEngine = new DestinationEngine();
+module.exports = destinationEngine;
+module.exports.DestinationEngine = DestinationEngine;

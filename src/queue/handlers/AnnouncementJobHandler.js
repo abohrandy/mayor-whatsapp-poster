@@ -1,4 +1,4 @@
-const DestinationEngine = require('../../destinations/DestinationEngine');
+const destinationEngine = require('../../destinations/DestinationEngine');
 const jobLogger = require('../JobLogger');
 
 class AnnouncementJobHandler {
@@ -27,7 +27,7 @@ class AnnouncementJobHandler {
             includeStatus: Boolean(payload.includeStatus)
         });
 
-        const result = await DestinationEngine.dispatch(payload);
+        const result = await destinationEngine.dispatch(payload);
 
         await jobLogger.logAutomation(jobId, `Announcement dispatch completed.`, {
             totalDelivered: result.succeeded,
