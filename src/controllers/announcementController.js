@@ -369,10 +369,12 @@ const announcementController = {
                 return res.status(400).json({ error: spamCheck.message });
             }
 
+            await logActivity('announcement_posted', `Manual post initiated for "${ann.title}"`, req.user.id);
+
             const { sendAnnouncement } = require('../services/scheduler');
             setImmediate(() => sendAnnouncement(ann));
 
-            res.json({ message: 'Post initiated. Check logs for status.' });
+            res.json({ message: 'Manual post initiated. Check Activity Logs for status.' });
         } catch (error) {
             console.error('Error in postNow:', error);
             res.status(500).json({ error: 'Internal server error.' });

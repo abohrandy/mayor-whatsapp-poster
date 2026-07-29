@@ -30,14 +30,13 @@ class AnnouncementJobHandler {
         const result = await DestinationEngine.dispatch(payload);
 
         await jobLogger.logAutomation(jobId, `Announcement dispatch completed.`, {
-            totalDelivered: result.delivered,
-            totalFailed: result.failed
+            totalDelivered: result.succeeded,
+            totalFailed: result.failed,
+            totalTargets: result.totalTargets
         });
 
-        if (result.failed > 0) {
-            await jobLogger.logError(jobId, `Partial failure during dispatch: ${result.failed} recipient(s) failed.`, {
-                errors: result.errors
-            });
+        if (result.failed > 0 && result.succeeded === 0) {
+            throw new Error(`Dispatch failed for all ${result.totalTargets} destination(s). Check WhatsApp connection status.`);
         }
 
         return result;

@@ -57,7 +57,7 @@ class JobQueue {
 
     async failJob(jobId, errorMessage) {
         const db = await getDb();
-        const job = await db.get('SELECT attempts, max_retries FROM jobs WHERE id = ?', [jobId]);
+        const job = await db.get('SELECT user_id, attempts, max_retries FROM jobs WHERE id = ?', [jobId]);
         const now = new Date().toISOString();
 
         const isFinalFailure = job ? job.attempts >= job.max_retries : true;
@@ -73,6 +73,19 @@ class JobQueue {
             maxRetries: job?.max_retries,
             finalFailure: isFinalFailure
         });
+
+        if (job && job.user_id) {
+            try {
+                const { logActivity } = require('../models/database');
+                await logActivity(
+                    'announcement_error',
+                    `Job #${jobId} failed (attempt ${job.attempts}/${job.max_retries}): ${errorMessage}`,
+                    job.user_id
+                );
+            } catch (logErr) {
+                console.error('[JobQueue] Failed to log activity for failed job:', logErr);
+            }
+        }
     }
 
     async retryJob(jobId) {
