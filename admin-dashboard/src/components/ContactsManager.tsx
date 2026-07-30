@@ -9,11 +9,20 @@ interface Contact {
   email: string | null;
   tags: string[];
   custom_fields: Record<string, string>;
+  whatsapp_session_id?: string | null;
   created_at: string;
+}
+
+interface WASession {
+  session_id: string;
+  push_name?: string;
+  me_jid?: string;
 }
 
 const ContactsManager = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [sessions, setSessions] = useState<WASession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('');
@@ -34,14 +43,27 @@ const ContactsManager = () => {
   const API = '/api';
 
   useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  useEffect(() => {
     fetchContacts();
-  }, [searchTerm, selectedTag]);
+  }, [searchTerm, selectedTag, selectedSession]);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await axios.get(`${API}/whatsapp/status`);
+      setSessions(res.data.sessions || []);
+    } catch (e) {
+      console.error('Error fetching whatsapp sessions:', e);
+    }
+  };
 
   const fetchContacts = async () => {
     setLoading(true);
     try {
       const res = await axios.get(`${API}/contacts`, {
-        params: { search: searchTerm, tag: selectedTag }
+        params: { search: searchTerm, tag: selectedTag, whatsapp_session_id: selectedSession }
       });
       setContacts(res.data);
     } catch (e) {
@@ -180,6 +202,21 @@ const ContactsManager = () => {
             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
           />
         </div>
+
+        {sessions.length > 0 && (
+          <select
+            value={selectedSession}
+            onChange={e => setSelectedSession(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="">All WhatsApp Accounts ({sessions.length})</option>
+            {sessions.map(s => (
+              <option key={s.session_id} value={s.session_id}>
+                {s.push_name || s.me_jid || s.session_id}
+              </option>
+            ))}
+          </select>
+        )}
 
         {allTags.length > 0 && (
           <select

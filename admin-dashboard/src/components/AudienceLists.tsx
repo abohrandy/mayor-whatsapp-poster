@@ -23,7 +23,11 @@ interface AudienceList {
   contact_list_ids?: number[];
 }
 
-const AudienceLists = () => {
+interface AudienceListsProps {
+  showGroupsOnly?: boolean;
+}
+
+const AudienceLists = ({ showGroupsOnly = false }: AudienceListsProps) => {
   const [audienceLists, setAudienceLists] = useState<AudienceList[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
@@ -151,6 +155,60 @@ const AudienceLists = () => {
   const filteredGroups = groups.filter(g =>
     g.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (showGroupsOnly) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-bold text-white">WhatsApp Groups</h3>
+            <p className="text-slate-400 text-sm">View all WhatsApp group chats synced from your connected accounts.</p>
+          </div>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Search WhatsApp groups by name..."
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+          </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="glass-card p-12 text-center space-y-4">
+            <div className="inline-flex p-4 bg-indigo-500/10 rounded-full text-indigo-400">
+              <Users size={32} />
+            </div>
+            <h3 className="text-lg font-semibold text-white">No WhatsApp Groups Found</h3>
+            <p className="text-slate-400 text-sm max-w-sm mx-auto">
+              Make sure your WhatsApp account is connected under WhatsApp Status to sync your group chats.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredGroups.map(g => (
+              <div key={g.id} className="glass-card p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-bold text-sm">
+                  {g.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                  <h4 className="font-semibold text-white truncate text-sm">{g.name}</h4>
+                  <p className="text-xs text-slate-400 font-mono truncate">{g.id}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
