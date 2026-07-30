@@ -3,10 +3,16 @@ const { getDb, logActivity } = require('../models/database');
 exports.list = async (req, res) => {
     try {
         const db = await getDb();
-        const { search, tag } = req.query;
+        const { search, tag, whatsapp_session_id, session_id } = req.query;
 
         let query = 'SELECT * FROM contacts WHERE user_id = ?';
         let params = [req.user.id];
+
+        const targetSession = whatsapp_session_id || session_id;
+        if (targetSession) {
+            query += ' AND whatsapp_session_id = ?';
+            params.push(targetSession);
+        }
 
         if (search) {
             query += ' AND (name LIKE ? OR phone_number LIKE ? OR email LIKE ?)';

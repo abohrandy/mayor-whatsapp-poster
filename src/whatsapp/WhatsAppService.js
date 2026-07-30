@@ -190,8 +190,8 @@ class WhatsAppService {
                 if (!cleanPhone) continue;
 
                 const existing = await db.get(
-                    'SELECT id, tags FROM contacts WHERE user_id = ? AND phone_number = ?',
-                    [userId, cleanPhone]
+                    'SELECT id, tags FROM contacts WHERE user_id = ? AND whatsapp_session_id = ? AND phone_number = ?',
+                    [userId, sessionJid, cleanPhone]
                 );
 
                 if (existing) {
@@ -207,8 +207,8 @@ class WhatsAppService {
                 } else {
                     const tagsJSON = JSON.stringify(['whatsapp_synced']);
                     await db.run(
-                        'INSERT INTO contacts (name, phone_number, tags, user_id) VALUES (?, ?, ?, ?)',
-                        [item.name.trim(), cleanPhone, tagsJSON, userId]
+                        'INSERT INTO contacts (name, phone_number, tags, whatsapp_session_id, user_id) VALUES (?, ?, ?, ?, ?)',
+                        [item.name.trim(), cleanPhone, tagsJSON, sessionJid, userId]
                     );
                 }
                 upsertedCount++;

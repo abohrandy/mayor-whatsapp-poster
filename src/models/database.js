@@ -462,11 +462,24 @@ async function initDb() {
             email TEXT,
             tags TEXT DEFAULT '[]',
             custom_fields TEXT DEFAULT '{}',
+            whatsapp_session_id TEXT DEFAULT NULL,
             user_id INTEGER NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // Ensure whatsapp_session_id column exists on existing contacts tables
+    try {
+        const contactColumns = await db.all("PRAGMA table_info(contacts)");
+        const hasSessionId = contactColumns.some(col => col.name === 'whatsapp_session_id');
+        if (!hasSessionId) {
+            await db.exec("ALTER TABLE contacts ADD COLUMN whatsapp_session_id TEXT DEFAULT NULL");
+            console.log('Added whatsapp_session_id column to contacts table');
+        }
+    } catch (err) {
+        console.error('Failed to migrate contacts table for whatsapp_session_id:', err);
+    }
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS contact_lists (

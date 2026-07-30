@@ -91,17 +91,7 @@ async function checkAndSendDue() {
         const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         for (const ann of announcements) {
-            let isDue = false;
             if (ann.next_post_at && ann.next_post_at <= nowIso) {
-                isDue = true;
-            } else if (ann.post_time && ann.post_time <= currentHHMM) {
-                const lastPostedDay = ann.last_posted_at ? ann.last_posted_at.slice(0, 10) : null;
-                if (lastPostedDay !== todayStr) {
-                    isDue = true;
-                }
-            }
-
-            if (isDue) {
                 dueList.push(ann);
             }
         }
