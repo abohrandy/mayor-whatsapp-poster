@@ -25,6 +25,7 @@ interface Announcement {
   target_groups: string; // JSON
   target_contacts?: string; // JSON
   target_contact_lists?: string; // JSON
+  target_group_lists?: string; // JSON
   target_audience_lists?: string; // JSON
   include_status?: number;
   ribbon_index: number;
@@ -113,14 +114,16 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     target_groups: [] as string[],
     target_contacts: [] as number[],
     target_contact_lists: [] as number[],
+    target_group_lists: [] as number[],
     target_audience_lists: [] as number[],
     include_status: false,
     sender_jid: '',
   };
   const [form, setForm] = useState(defaultForm);
-  const [destinationTab, setDestinationTab] = useState<'groups' | 'contacts' | 'contact_lists' | 'audience_lists' | 'status'>('groups');
+  const [destinationTab, setDestinationTab] = useState<'groups' | 'contacts' | 'contact_lists' | 'group_lists' | 'audience_lists' | 'status'>('groups');
   const [contactsList, setContactsList] = useState<any[]>([]);
   const [contactLists, setContactLists] = useState<any[]>([]);
+  const [groupLists, setGroupLists] = useState<any[]>([]);
   const [audienceLists, setAudienceLists] = useState<any[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiCredits, setAiCredits] = useState<{ remainingCredits: number; monthlyLimit: number; resetDate: string | null } | null>(null);
@@ -217,6 +220,13 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     } catch { setContactLists([]); }
   };
 
+  const fetchGroupListsData = async () => {
+    try {
+      const res = await axios.get(`${API}/group-lists`);
+      setGroupLists(res.data);
+    } catch { setGroupLists([]); }
+  };
+
   const fetchAICredits = async () => {
     try {
       const res = await axios.get(`${API}/ai/credits`);
@@ -293,6 +303,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     fetchAudienceListsData();
     fetchContactsData();
     fetchContactListsData();
+    fetchGroupListsData();
     fetchAICredits();
     if (ann) {
       setEditingId(ann.id);
@@ -309,6 +320,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
         target_groups: parseJSON<string[]>(ann.target_groups, []),
         target_contacts: parseJSON<number[]>(ann.target_contacts || '[]', []),
         target_contact_lists: parseJSON<number[]>(ann.target_contact_lists || '[]', []),
+        target_group_lists: parseJSON<number[]>(ann.target_group_lists || '[]', []),
         target_audience_lists: parseJSON<number[]>(ann.target_audience_lists || '[]', []),
         include_status: Boolean(ann.include_status),
         sender_jid: ann.sender_jid || '',
@@ -379,11 +391,12 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
     const hasAnyTarget = form.target_groups.length > 0 ||
       form.target_contacts.length > 0 ||
       form.target_contact_lists.length > 0 ||
+      form.target_group_lists.length > 0 ||
       form.target_audience_lists.length > 0 ||
       form.include_status;
 
     if (!hasAnyTarget) {
-      alert('Please select at least one target destination (Groups, Contacts, Contact Lists, Audience Lists, or WhatsApp Status).');
+      alert('Please select at least one target destination (Groups, Contacts, Contact Lists, Group Lists, Audience Lists, or WhatsApp Status).');
       return;
     }
 
@@ -398,6 +411,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('target_groups', JSON.stringify(form.target_groups));
       fd.append('target_contacts', JSON.stringify(form.target_contacts));
       fd.append('target_contact_lists', JSON.stringify(form.target_contact_lists));
+      fd.append('target_group_lists', JSON.stringify(form.target_group_lists));
       fd.append('target_audience_lists', JSON.stringify(form.target_audience_lists));
       fd.append('include_status', form.include_status ? '1' : '0');
       fd.append('keep_media', '1'); // keep existing when editing
@@ -1107,6 +1121,15 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   </button>
                   <button
                     type="button"
+                    onClick={() => setDestinationTab('group_lists')}
+                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      destinationTab === 'group_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Group Lists ({form.target_group_lists.length})
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setDestinationTab('audience_lists')}
                     className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       destinationTab === 'audience_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
@@ -1221,7 +1244,38 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   </div>
                 )}
 
-                {/* Tab 4: Audience Lists */}
+                {/* Tab 4: Group Lists */}
+                {destinationTab === 'group_lists' && (
+                  <div className="space-y-3">
+                    <span className="text-xs text-slate-400">Select Saved Group Lists:</span>
+                    <div className="max-h-44 overflow-y-auto space-y-1 bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                      {groupLists.map(gl => (
+                        <label key={gl.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${form.target_group_lists.includes(gl.id) ? 'bg-indigo-600/20 border border-indigo-500/30' : 'hover:bg-slate-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="accent-indigo-500"
+                            checked={form.target_group_lists.includes(gl.id)}
+                            onChange={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                target_group_lists: prev.target_group_lists.includes(gl.id)
+                                  ? prev.target_group_lists.filter(id => id !== gl.id)
+                                  : [...prev.target_group_lists, gl.id]
+                              }));
+                            }}
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-white">{gl.name}</div>
+                            {gl.description && <div className="text-xs text-slate-400">{gl.description}</div>}
+                          </div>
+                        </label>
+                      ))}
+                      {groupLists.length === 0 && <p className="text-xs text-slate-500 p-2">No group lists saved yet.</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 5: Audience Lists */}
                 {destinationTab === 'audience_lists' && (
                   <div className="space-y-3">
                     <span className="text-xs text-slate-400">Select Combined Audience Lists:</span>

@@ -319,6 +319,10 @@ async function initDb() {
         try { await db.exec("ALTER TABLE announcements ADD COLUMN target_audience_lists TEXT NOT NULL DEFAULT '[]'"); } catch (err) {}
     }
 
+    if (!annColumns.some(col => col.name === 'target_group_lists')) {
+        try { await db.exec("ALTER TABLE announcements ADD COLUMN target_group_lists TEXT NOT NULL DEFAULT '[]'"); } catch (err) {}
+    }
+
     if (!annColumns.some(col => col.name === 'include_status')) {
         try { await db.exec("ALTER TABLE announcements ADD COLUMN include_status INTEGER NOT NULL DEFAULT 0"); } catch (err) {}
     }
@@ -494,12 +498,25 @@ async function initDb() {
     `);
 
     await db.exec(`
+        CREATE TABLE IF NOT EXISTS group_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            groups TEXT NOT NULL DEFAULT '[]',
+            user_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await db.exec(`
         CREATE TABLE IF NOT EXISTS audience_lists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT DEFAULT '',
             groups TEXT NOT NULL DEFAULT '[]',
             contact_list_ids TEXT DEFAULT '[]',
+            group_list_ids TEXT DEFAULT '[]',
             user_id INTEGER DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -520,6 +537,12 @@ async function initDb() {
     if (!hasContactListIds) {
         try {
             await db.exec("ALTER TABLE audience_lists ADD COLUMN contact_list_ids TEXT DEFAULT '[]'");
+        } catch (err) {}
+    }
+
+    if (!listColumns.some(col => col.name === 'group_list_ids')) {
+        try {
+            await db.exec("ALTER TABLE audience_lists ADD COLUMN group_list_ids TEXT DEFAULT '[]'");
         } catch (err) {}
     }
 

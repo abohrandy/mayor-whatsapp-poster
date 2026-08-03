@@ -15,12 +15,20 @@ interface ContactList {
   contact_ids: number[];
 }
 
+interface GroupList {
+  id: number;
+  name: string;
+  description: string;
+  groups: string[];
+}
+
 interface AudienceList {
   id: number;
   name: string;
   description?: string;
   groups: string[];
   contact_list_ids?: number[];
+  group_list_ids?: number[];
 }
 
 interface AudienceListsProps {
@@ -33,6 +41,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
   const [audienceLists, setAudienceLists] = useState<AudienceList[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
+  const [groupLists, setGroupLists] = useState<GroupList[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Create / Edit Audience List state
@@ -42,6 +51,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
   const [description, setDescription] = useState('');
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedContactListIds, setSelectedContactListIds] = useState<number[]>([]);
+  const [selectedGroupListIds, setSelectedGroupListIds] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   const API = '/api';
@@ -53,14 +63,16 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [listsRes, groupsRes, contactListsRes] = await Promise.all([
+      const [listsRes, groupsRes, contactListsRes, groupListsRes] = await Promise.all([
         axios.get(`${API}/audience-lists`).catch(() => axios.get(`${API}/profiles`)),
         axios.get(`${API}/whatsapp/chats`).catch(() => ({ data: [] as Group[] })),
-        axios.get(`${API}/contact-lists`).catch(() => ({ data: [] as ContactList[] }))
+        axios.get(`${API}/contact-lists`).catch(() => ({ data: [] as ContactList[] })),
+        axios.get(`${API}/group-lists`).catch(() => ({ data: [] as GroupList[] }))
       ]);
       setAudienceLists(listsRes.data);
       setGroups(groupsRes.data);
       setContactLists(contactListsRes.data);
+      setGroupLists(groupListsRes.data);
     } catch (e) {
       console.error('Error fetching audience lists data:', e);
     } finally {
@@ -74,8 +86,8 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
       alert('Please enter an audience list name.');
       return;
     }
-    if (selectedGroups.length === 0 && selectedContactListIds.length === 0) {
-      alert('Please select at least one WhatsApp group or Contact List.');
+    if (selectedGroups.length === 0 && selectedContactListIds.length === 0 && selectedGroupListIds.length === 0) {
+      alert('Please select at least one WhatsApp group, Group List, or Contact List.');
       return;
     }
 
@@ -85,7 +97,8 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
           name: listName.trim(),
           description: description.trim(),
           groups: selectedGroups,
-          contact_list_ids: selectedContactListIds
+          contact_list_ids: selectedContactListIds,
+          group_list_ids: selectedGroupListIds
         });
         setAudienceLists(prev => prev.map(l => l.id === editingListId ? res.data : l));
       } else {
@@ -93,7 +106,8 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
           name: listName.trim(),
           description: description.trim(),
           groups: selectedGroups,
-          contact_list_ids: selectedContactListIds
+          contact_list_ids: selectedContactListIds,
+          group_list_ids: selectedGroupListIds
         });
         setAudienceLists(prev => [...prev, res.data]);
       }
@@ -109,6 +123,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
     setDescription(item.description || '');
     setSelectedGroups(item.groups || []);
     setSelectedContactListIds(item.contact_list_ids || []);
+    setSelectedGroupListIds(item.group_list_ids || []);
     setIsCreating(true);
   };
 
@@ -119,6 +134,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
     setDescription('');
     setSelectedGroups([]);
     setSelectedContactListIds([]);
+    setSelectedGroupListIds([]);
   };
 
   const handleDeleteList = async (id: number, name: string) => {
@@ -141,6 +157,12 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
   const toggleContactListSelection = (id: number) => {
     setSelectedContactListIds(prev =>
       prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleGroupListSelection = (id: number) => {
+    setSelectedGroupListIds(prev =>
+      prev.includes(id) ? prev.filter(gId => gId !== id) : [...prev, id]
     );
   };
 
@@ -304,6 +326,34 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
               </div>
             )}
 
+            {/* Saved Group Lists Selection */}
+            {groupLists.length > 0 && (
+              <div>
+                <label className="block text-slate-300 text-sm font-medium mb-2">Include Saved Group Lists ({selectedGroupListIds.length} selected)</label>
+                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
+                  {groupLists.map(gl => (
+                    <div
+                      key={gl.id}
+                      onClick={() => toggleGroupListSelection(gl.id)}
+                      className={`flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                        selectedGroupListIds.includes(gl.id)
+                          ? 'bg-indigo-600/20 border border-indigo-500/30 text-white'
+                          : 'hover:bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {selectedGroupListIds.includes(gl.id) ? (
+                        <CheckSquare size={14} className="text-indigo-400" />
+                      ) : (
+                        <Square size={14} className="text-slate-500" />
+                      )}
+                      <span className="font-medium">{gl.name}</span>
+                      <span className="text-[10px] text-slate-500">({(gl.groups || []).length} groups)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* WhatsApp Groups Selection */}
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -409,6 +459,11 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
                     <span className="text-xs bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-md font-medium">
                       {(l.groups || []).length} groups
                     </span>
+                    {(l.group_list_ids || []).length > 0 && (
+                      <span className="text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-md font-medium flex items-center gap-1">
+                        <Users size={11} /> {l.group_list_ids?.length} group lists
+                      </span>
+                    )}
                     {(l.contact_list_ids || []).length > 0 && (
                       <span className="text-xs bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-md font-medium flex items-center gap-1">
                         <List size={11} /> {l.contact_list_ids?.length} contact lists

@@ -156,7 +156,6 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         
         let daysOfWeek = [];
         try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
-        const nextTry = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
         await db.run(`UPDATE announcements SET next_post_at = ? WHERE id = ?`, [nextTry, ann.id]);
         return;
     }
@@ -173,15 +172,31 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     let contactListIds = [];
     try { contactListIds = JSON.parse(ann.target_contact_lists || '[]'); } catch { contactListIds = []; }
 
+    let groupListIds = [];
+    try { groupListIds = JSON.parse(ann.target_group_lists || '[]'); } catch { groupListIds = []; }
+
     let audienceListIds = [];
     try { audienceListIds = JSON.parse(ann.target_audience_lists || '[]'); } catch { audienceListIds = []; }
 
     const includeStatus = Boolean(ann.include_status);
 
-    // Expand Audience Lists into Groups and Contact Lists
+    // Expand Group Lists into Groups
+    if (groupListIds.length > 0) {
+        for (const gListId of groupListIds) {
+            const glRow = await db.get('SELECT groups FROM group_lists WHERE id = ?', [gListId]);
+            if (glRow) {
+                try {
+                    const gList = JSON.parse(glRow.groups || '[]');
+                    targetGroups.push(...gList);
+                } catch {}
+            }
+        }
+    }
+
+    // Expand Audience Lists into Groups, Group Lists, and Contact Lists
     if (audienceListIds.length > 0) {
         for (const audId of audienceListIds) {
-            const audRow = await db.get('SELECT groups, contact_list_ids FROM audience_lists WHERE id = ?', [audId]);
+            const audRow = await db.get('SELECT groups, contact_list_ids, group_list_ids FROM audience_lists WHERE id = ?', [audId]);
             if (audRow) {
                 try {
                     const gList = JSON.parse(audRow.groups || '[]');
@@ -190,6 +205,16 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
                 try {
                     const cList = JSON.parse(audRow.contact_list_ids || '[]');
                     contactListIds.push(...cList);
+                } catch {}
+                try {
+                    const glList = JSON.parse(audRow.group_list_ids || '[]');
+                    for (const gListId of glList) {
+                        const glRow = await db.get('SELECT groups FROM group_lists WHERE id = ?', [gListId]);
+                        if (glRow) {
+                            const gList = JSON.parse(glRow.groups || '[]');
+                            targetGroups.push(...gList);
+                        }
+                    }
                 } catch {}
             }
         }

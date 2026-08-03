@@ -7,7 +7,8 @@ exports.list = async (req, res) => {
         res.json(lists.map(l => ({
             ...l,
             groups: JSON.parse(l.groups || '[]'),
-            contact_list_ids: JSON.parse(l.contact_list_ids || '[]')
+            contact_list_ids: JSON.parse(l.contact_list_ids || '[]'),
+            group_list_ids: JSON.parse(l.group_list_ids || '[]')
         })));
     } catch (error) {
         console.error('Error fetching audience lists:', error);
@@ -26,7 +27,8 @@ exports.get = async (req, res) => {
         res.json({
             ...list,
             groups: JSON.parse(list.groups || '[]'),
-            contact_list_ids: JSON.parse(list.contact_list_ids || '[]')
+            contact_list_ids: JSON.parse(list.contact_list_ids || '[]'),
+            group_list_ids: JSON.parse(list.group_list_ids || '[]')
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -36,7 +38,7 @@ exports.get = async (req, res) => {
 exports.create = async (req, res) => {
     try {
         const db = await getDb();
-        const { name, description, groups, contact_list_ids } = req.body;
+        const { name, description, groups, contact_list_ids, group_list_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required.' });
@@ -49,10 +51,11 @@ exports.create = async (req, res) => {
 
         const groupsJSON = JSON.stringify(Array.isArray(groups) ? groups : []);
         const contactListIdsJSON = JSON.stringify(Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : []);
+        const groupListIdsJSON = JSON.stringify(Array.isArray(group_list_ids) ? group_list_ids.map(Number) : []);
 
         const result = await db.run(
-            'INSERT INTO audience_lists (name, description, groups, contact_list_ids, user_id) VALUES (?, ?, ?, ?, ?)',
-            [name.trim(), description ? description.trim() : '', groupsJSON, contactListIdsJSON, req.user.id]
+            'INSERT INTO audience_lists (name, description, groups, contact_list_ids, group_list_ids, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+            [name.trim(), description ? description.trim() : '', groupsJSON, contactListIdsJSON, groupListIdsJSON, req.user.id]
         );
 
         const newId = result.lastID;
@@ -63,7 +66,8 @@ exports.create = async (req, res) => {
             name: name.trim(),
             description: description ? description.trim() : '',
             groups: Array.isArray(groups) ? groups : [],
-            contact_list_ids: Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : []
+            contact_list_ids: Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : [],
+            group_list_ids: Array.isArray(group_list_ids) ? group_list_ids.map(Number) : []
         });
     } catch (error) {
         console.error('Error creating audience list:', error);
@@ -95,7 +99,7 @@ exports.update = async (req, res) => {
     try {
         const db = await getDb();
         const { id } = req.params;
-        const { name, description, groups, contact_list_ids } = req.body;
+        const { name, description, groups, contact_list_ids, group_list_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Name is required.' });
@@ -115,10 +119,11 @@ exports.update = async (req, res) => {
 
         const groupsJSON = JSON.stringify(Array.isArray(groups) ? groups : []);
         const contactListIdsJSON = JSON.stringify(Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : []);
+        const groupListIdsJSON = JSON.stringify(Array.isArray(group_list_ids) ? group_list_ids.map(Number) : []);
 
         await db.run(
-            'UPDATE audience_lists SET name = ?, description = ?, groups = ?, contact_list_ids = ? WHERE id = ? AND user_id = ?',
-            [name.trim(), description ? description.trim() : '', groupsJSON, contactListIdsJSON, id, req.user.id]
+            'UPDATE audience_lists SET name = ?, description = ?, groups = ?, contact_list_ids = ?, group_list_ids = ? WHERE id = ? AND user_id = ?',
+            [name.trim(), description ? description.trim() : '', groupsJSON, contactListIdsJSON, groupListIdsJSON, id, req.user.id]
         );
 
         await logActivity('audience_list_updated', `Audience List "${name}" updated.`, req.user.id);
@@ -128,7 +133,8 @@ exports.update = async (req, res) => {
             name: name.trim(),
             description: description ? description.trim() : '',
             groups: Array.isArray(groups) ? groups : [],
-            contact_list_ids: Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : []
+            contact_list_ids: Array.isArray(contact_list_ids) ? contact_list_ids.map(Number) : [],
+            group_list_ids: Array.isArray(group_list_ids) ? group_list_ids.map(Number) : []
         });
     } catch (error) {
         console.error('Error updating audience list:', error);

@@ -6,6 +6,7 @@ const profileController = require('../controllers/profileController');
 const audienceListController = require('../controllers/audienceListController');
 const contactController = require('../controllers/contactController');
 const contactListController = require('../controllers/contactListController');
+const groupListController = require('../controllers/groupListController');
 const authController = require('../controllers/authController');
 const paymentController = require('../controllers/paymentController');
 const adminController = require('../controllers/adminController');
@@ -421,6 +422,13 @@ router.post('/contacts', requireAuth, requireSubscription, contactController.cre
 router.post('/contacts/import', requireAuth, requireSubscription, contactController.importBulk);
 router.put('/contacts/:id', requireAuth, requireSubscription, contactController.update);
 router.delete('/contacts/:id', requireAuth, requireSubscription, contactController.delete);
+
+// ── Group Lists ───────────────────────────────────────────────────────────────
+router.get('/group-lists', requireAuth, requireSubscription, groupListController.list);
+router.get('/group-lists/:id', requireAuth, requireSubscription, groupListController.get);
+router.post('/group-lists', requireAuth, requireSubscription, groupListController.create);
+router.put('/group-lists/:id', requireAuth, requireSubscription, groupListController.update);
+router.delete('/group-lists/:id', requireAuth, requireSubscription, groupListController.delete);
 
 // ── Contact Lists ─────────────────────────────────────────────────────────────
 router.get('/contact-lists', requireAuth, requireSubscription, contactListController.list);

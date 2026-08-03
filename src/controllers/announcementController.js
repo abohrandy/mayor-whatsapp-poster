@@ -73,6 +73,9 @@ const announcementController = {
             let contactLists = [];
             try { contactLists = JSON.parse(target_contact_lists || '[]'); } catch { contactLists = []; }
 
+            let groupLists = [];
+            try { groupLists = JSON.parse(target_group_lists || '[]'); } catch { groupLists = []; }
+
             let audienceLists = [];
             try { audienceLists = JSON.parse(target_audience_lists || '[]'); } catch { audienceLists = []; }
 
@@ -109,8 +112,8 @@ const announcementController = {
             const db = await initDb();
             const result = await db.run(
                 `INSERT INTO announcements
-                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, sender_jid, post_time, target_groups, target_contacts, target_contact_lists, target_audience_lists, include_status, ribbon_index, status, next_post_at, user_id)
-                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`,
+                    (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, sender_jid, post_time, target_groups, target_contacts, target_contact_lists, target_group_lists, target_audience_lists, include_status, ribbon_index, status, next_post_at, user_id)
+                 VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`,
                 [
                     title,
                     caption || '',
@@ -124,6 +127,7 @@ const announcementController = {
                     JSON.stringify(groups),
                     JSON.stringify(contacts),
                     JSON.stringify(contactLists),
+                    JSON.stringify(groupLists),
                     JSON.stringify(audienceLists),
                     incStatus,
                     nextPostAt || null,
@@ -146,7 +150,7 @@ const announcementController = {
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
                 recurrence_days_of_week, post_time, target_groups, target_contacts,
-                target_contact_lists, target_audience_lists, include_status,
+                target_contact_lists, target_group_lists, target_audience_lists, include_status,
                 next_post_at, keep_media, sender_jid
             } = req.body;
 
@@ -185,6 +189,9 @@ const announcementController = {
             let contactLists = [];
             try { contactLists = JSON.parse(target_contact_lists || '[]'); } catch { contactLists = []; }
 
+            let groupLists = [];
+            try { groupLists = JSON.parse(target_group_lists || '[]'); } catch { groupLists = []; }
+
             let audienceLists = [];
             try { audienceLists = JSON.parse(target_audience_lists || '[]'); } catch { audienceLists = []; }
 
@@ -219,7 +226,7 @@ const announcementController = {
                 `UPDATE announcements
                  SET title = ?, caption = ?, caption_variations = ?, media_files = ?, is_recurring = ?,
                      recurrence_days = ?, recurrence_days_of_week = ?, sender_jid = ?, post_time = ?,
-                     target_groups = ?, target_contacts = ?, target_contact_lists = ?, target_audience_lists = ?,
+                     target_groups = ?, target_contacts = ?, target_contact_lists = ?, target_group_lists = ?, target_audience_lists = ?,
                      include_status = ?, next_post_at = ?
                  WHERE id = ? AND user_id = ?`,
                 [
@@ -235,6 +242,7 @@ const announcementController = {
                     JSON.stringify(groups),
                     JSON.stringify(contacts),
                     JSON.stringify(contactLists),
+                    JSON.stringify(groupLists),
                     JSON.stringify(audienceLists),
                     incStatus,
                     computedNextPostAt,
