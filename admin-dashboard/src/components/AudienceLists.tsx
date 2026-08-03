@@ -25,16 +25,18 @@ interface AudienceList {
 
 interface AudienceListsProps {
   showGroupsOnly?: boolean;
+  onSwitchToCreateAudience?: () => void;
+  initialCreateMode?: boolean;
 }
 
-const AudienceLists = ({ showGroupsOnly = false }: AudienceListsProps) => {
+const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initialCreateMode = false }: AudienceListsProps) => {
   const [audienceLists, setAudienceLists] = useState<AudienceList[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [contactLists, setContactLists] = useState<ContactList[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Create / Edit Audience List state
-  const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(initialCreateMode);
   const [editingListId, setEditingListId] = useState<number | null>(null);
   const [listName, setListName] = useState('');
   const [description, setDescription] = useState('');
@@ -164,6 +166,14 @@ const AudienceLists = ({ showGroupsOnly = false }: AudienceListsProps) => {
             <h3 className="text-xl font-bold text-white">WhatsApp Groups</h3>
             <p className="text-slate-400 text-sm">View all WhatsApp group chats synced from your connected accounts.</p>
           </div>
+          {onSwitchToCreateAudience && (
+            <button
+              onClick={onSwitchToCreateAudience}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer text-sm shadow-md"
+            >
+              <Plus size={18} /> Create Group List
+            </button>
+          )}
         </div>
 
         <div className="relative">

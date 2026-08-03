@@ -6,6 +6,19 @@ import AudienceLists from './AudienceLists';
 
 const AudienceModule = () => {
   const [activeSubTab, setActiveSubTab] = useState<'contacts' | 'contact-lists' | 'audience-lists' | 'groups'>('contacts');
+  const [autoCreateAudience, setAutoCreateAudience] = useState(false);
+
+  const handleSwitchToCreateAudience = () => {
+    setAutoCreateAudience(true);
+    setActiveSubTab('audience-lists');
+  };
+
+  const handleSubTabChange = (tab: 'contacts' | 'contact-lists' | 'audience-lists' | 'groups') => {
+    if (tab !== 'audience-lists') {
+      setAutoCreateAudience(false);
+    }
+    setActiveSubTab(tab);
+  };
 
   return (
     <div className="space-y-6">
@@ -18,7 +31,7 @@ const AudienceModule = () => {
       {/* Tab Navigation */}
       <div className="flex border-b border-slate-800 space-x-1">
         <button
-          onClick={() => setActiveSubTab('contacts')}
+          onClick={() => handleSubTabChange('contacts')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
             activeSubTab === 'contacts'
               ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg'
@@ -29,7 +42,7 @@ const AudienceModule = () => {
         </button>
 
         <button
-          onClick={() => setActiveSubTab('contact-lists')}
+          onClick={() => handleSubTabChange('contact-lists')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
             activeSubTab === 'contact-lists'
               ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg'
@@ -40,7 +53,7 @@ const AudienceModule = () => {
         </button>
 
         <button
-          onClick={() => setActiveSubTab('groups')}
+          onClick={() => handleSubTabChange('groups')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
             activeSubTab === 'groups'
               ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg'
@@ -51,7 +64,7 @@ const AudienceModule = () => {
         </button>
 
         <button
-          onClick={() => setActiveSubTab('audience-lists')}
+          onClick={() => handleSubTabChange('audience-lists')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
             activeSubTab === 'audience-lists'
               ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg'
@@ -65,8 +78,18 @@ const AudienceModule = () => {
       {/* Subtab Content */}
       {activeSubTab === 'contacts' && <ContactsManager />}
       {activeSubTab === 'contact-lists' && <ContactListsManager />}
-      {activeSubTab === 'groups' && <AudienceLists showGroupsOnly={true} />}
-      {activeSubTab === 'audience-lists' && <AudienceLists />}
+      {activeSubTab === 'groups' && (
+        <AudienceLists
+          showGroupsOnly={true}
+          onSwitchToCreateAudience={handleSwitchToCreateAudience}
+        />
+      )}
+      {activeSubTab === 'audience-lists' && (
+        <AudienceLists
+          key={autoCreateAudience ? 'create' : 'list'}
+          initialCreateMode={autoCreateAudience}
+        />
+      )}
     </div>
   );
 };
