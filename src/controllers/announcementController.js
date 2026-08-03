@@ -380,7 +380,7 @@ const announcementController = {
             await logActivity('announcement_posted', `Manual post initiated for "${ann.title}"`, req.user.id);
 
             const { sendAnnouncement } = require('../services/scheduler');
-            setImmediate(() => sendAnnouncement(ann));
+            setImmediate(() => sendAnnouncement(ann, true));
 
             res.json({ message: 'Manual post initiated. Check Activity Logs for status.' });
         } catch (error) {
