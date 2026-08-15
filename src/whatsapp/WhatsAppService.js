@@ -24,7 +24,7 @@ class WhatsAppService {
         await this.syncStatus();
 
         // Sync status periodically
-        this.syncInterval = setInterval(() => this.syncStatus(), 3000);
+        this.syncInterval = setInterval(() => this.syncStatus(), 20000);
     }
 
     async syncStatus() {

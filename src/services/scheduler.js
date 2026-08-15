@@ -1,9 +1,12 @@
 const cron = require('node-cron');
 const path = require('path');
+const fs = require('fs');
 const { getDb, logActivity } = require('../models/database');
 const waClient = require('./whatsapp');
 const { emitLog } = require('./socket');
 const { sendAnnouncementPostedEmail } = require('./email');
+
+const MEDIA_RETENTION_DAYS = parseInt(process.env.ANNOUNCEMENT_MEDIA_RETENTION_DAYS || '7', 10);
 
 function computeNextPostAt(postTimeStr = '08:00', isRecurring = 0, recurrenceDays = 1, daysOfWeek = []) {
     const now = new Date();
@@ -43,15 +46,76 @@ async function scheduleAnnouncementChecker() {
         await checkAndSendDue();
     }, { timezone: await getTimezone() });
 
+    // Daily cleanup of media belonging to one-time announcements that have already been sent
+    cron.schedule('30 3 * * *', async () => {
+        await cleanupOldAnnouncementMedia();
+    }, { timezone: await getTimezone() });
+
     setTimeout(async () => {
         console.log('[Scheduler] Running startup announcement check...');
         await checkAndSendDue();
+        await cleanupOldAnnouncementMedia();
     }, 3000);
 
     const { queueWorker } = require('../queue');
     queueWorker.start();
 
-    console.log('[Scheduler] Announcement checker (1-min interval) and Queue Worker initialized.');
+    console.log(`[Scheduler] Announcement checker (1-min interval), daily media cleanup (retention: ${MEDIA_RETENTION_DAYS}d), and Queue Worker initialized.`);
+}
+
+/**
+ * Delete media files for one-time (non-recurring) announcements that were sent
+ * more than MEDIA_RETENTION_DAYS ago. Recurring announcements are left untouched
+ * since their media is reused on every cycle.
+ */
+async function cleanupOldAnnouncementMedia() {
+    try {
+        const db = await getDb();
+        const cutoff = new Date(Date.now() - MEDIA_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+        const stale = await db.all(
+            `SELECT id, title, media_files FROM announcements
+             WHERE is_recurring = 0 AND status = 'inactive'
+               AND last_posted_at IS NOT NULL AND last_posted_at <= ?
+               AND media_files IS NOT NULL AND media_files != '[]'`,
+            [cutoff]
+        );
+
+        if (stale.length === 0) return;
+
+        const baseDir = process.env.DATA_DIR || path.join(__dirname, '..', '..');
+        let freedBytes = 0;
+        let filesDeleted = 0;
+
+        for (const ann of stale) {
+            let files = [];
+            try { files = JSON.parse(ann.media_files || '[]'); } catch { files = []; }
+
+            for (const f of files) {
+                if (!f.path) continue;
+                const fullPath = path.isAbsolute(f.path) ? f.path : path.resolve(baseDir, f.path);
+                try {
+                    if (fs.existsSync(fullPath)) {
+                        freedBytes += fs.statSync(fullPath).size;
+                        fs.unlinkSync(fullPath);
+                        filesDeleted++;
+                    }
+                } catch (err) {
+                    console.error(`[Scheduler] Failed to delete stale media file ${fullPath}:`, err.message);
+                }
+            }
+
+            await db.run("UPDATE announcements SET media_files = '[]' WHERE id = ?", [ann.id]);
+        }
+
+        const freedMb = (freedBytes / 1024 / 1024).toFixed(1);
+        console.log(`[Scheduler] Media cleanup: removed ${filesDeleted} file(s) (${freedMb} MB) from ${stale.length} one-time announcement(s) sent more than ${MEDIA_RETENTION_DAYS} day(s) ago.`);
+        if (filesDeleted > 0) {
+            await logActivity('media_cleanup', `Auto-cleanup removed ${filesDeleted} file(s) (${freedMb} MB) from ${stale.length} old announcement(s).`);
+        }
+    } catch (error) {
+        console.error('[Scheduler] Error in cleanupOldAnnouncementMedia:', error);
+    }
 }
 
 async function getTimezone() {
@@ -347,4 +411,4 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     }
 }
 
-module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement, computeNextPostAt };
+module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement, computeNextPostAt, cleanupOldAnnouncementMedia };
