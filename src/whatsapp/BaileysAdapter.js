@@ -34,6 +34,18 @@ class BaileysAdapter {
         }
     }
 
+    async pairPhone(phone) {
+        try {
+            console.log(`[BaileysAdapter] Requesting phone-pairing code for ${phone}...`);
+            const res = await axios.post(`${this.bridgeUrl}/session/pair-phone`, { phone });
+            return res.data;
+        } catch (err) {
+            const errMsg = err.response?.data || err.message;
+            console.error('[BaileysAdapter] Failed to request phone-pairing code:', errMsg);
+            throw new Error(typeof errMsg === 'string' ? errMsg : errMsg?.error || 'Failed to request pairing code');
+        }
+    }
+
     async deleteSession(id) {
         try {
             console.log(`[BaileysAdapter] Requesting deletion of session: ${id}...`);

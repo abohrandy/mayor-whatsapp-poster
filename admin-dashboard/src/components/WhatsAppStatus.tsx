@@ -15,6 +15,7 @@ interface WhatsAppSession {
     jid: string | null;
     status: string;
     qrText: string;
+    pairCode: string;
     lastError: string;
 }
 
@@ -129,6 +130,28 @@ const WhatsAppStatus = () => {
             await fetchSessions();
         } catch (error: any) {
             alert('Failed to add account: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleCreateSessionViaPhone = async () => {
+        const phone = window.prompt(
+            "Enter the WhatsApp phone number to link, with country code and no spaces or '+' (e.g. 2348012345678):"
+        );
+        if (!phone || !phone.trim()) return;
+
+        setCreating(true);
+        try {
+            await axios.post('/api/whatsapp/session/pair-phone', { phone: phone.trim() });
+            setLogs(prev => [{
+                time: new Date().toLocaleTimeString(),
+                msg: `Requested a phone-pairing code for ${phone.trim()}...`,
+                type: 'info'
+            }, ...prev]);
+            await fetchSessions();
+        } catch (error: any) {
+            alert('Failed to request pairing code: ' + (error.response?.data?.error || error.message));
         } finally {
             setCreating(false);
         }
@@ -302,14 +325,25 @@ const WhatsAppStatus = () => {
                     </h3>
                     <p className="text-sm text-slate-500">Connect, scan, and manage multiple WhatsApp numbers concurrently.</p>
                 </div>
-                <button
-                    onClick={handleCreateSession}
-                    disabled={creating}
-                    className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                    {creating ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={18} />}
-                    {creating ? 'Initializing...' : 'Add WhatsApp Account'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleCreateSessionViaPhone}
+                        disabled={creating}
+                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-bold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                        title="Link using an 8-character phone-pairing code instead of scanning a QR"
+                    >
+                        <Smartphone size={16} />
+                        Link with Phone Number
+                    </button>
+                    <button
+                        onClick={handleCreateSession}
+                        disabled={creating}
+                        className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                        {creating ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={18} />}
+                        {creating ? 'Initializing...' : 'Add WhatsApp Account'}
+                    </button>
+                </div>
             </div>
 
             {loading && sessions.length === 0 ? (
@@ -323,15 +357,25 @@ const WhatsAppStatus = () => {
                         <QrCode size={32} />
                     </div>
                     <h4 className="text-lg font-bold text-white mb-2">No WhatsApp Accounts Linked</h4>
-                    <p className="text-slate-500 max-w-sm mb-6">Link your first account to begin automated posting. Tap the button above to generate a connection QR code.</p>
-                    <button
-                        onClick={handleCreateSession}
-                        disabled={creating}
-                        className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-lg flex items-center gap-2 cursor-pointer"
-                    >
-                        {creating ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={18} />}
-                        Add WhatsApp Account
-                    </button>
+                    <p className="text-slate-500 max-w-sm mb-6">Link your first account to begin automated posting. Generate a connection QR code, or link with a phone number instead.</p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleCreateSessionViaPhone}
+                            disabled={creating}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-sm font-bold rounded-lg flex items-center gap-2 cursor-pointer"
+                        >
+                            <Smartphone size={16} />
+                            Link with Phone Number
+                        </button>
+                        <button
+                            onClick={handleCreateSession}
+                            disabled={creating}
+                            className="px-5 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-lg flex items-center gap-2 cursor-pointer"
+                        >
+                            {creating ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={18} />}
+                            Add WhatsApp Account
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -390,7 +434,24 @@ const WhatsAppStatus = () => {
 
                                     {/* Action Content inside card */}
                                     <div className="p-6 space-y-4">
-                                        {needsAuth && sess.qrText ? (
+                                        {needsAuth && sess.pairCode && !sess.qrText ? (
+                                            <div className="flex flex-col items-center gap-4 py-4">
+                                                <p className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                                    <Smartphone size={16} className="text-amber-500" /> Enter this code on your phone:
+                                                </p>
+                                                <div className="bg-white rounded-lg px-6 py-4 shadow-lg">
+                                                    <span className="font-mono text-3xl font-black tracking-[0.3em] text-slate-900">
+                                                        {sess.pairCode}
+                                                    </span>
+                                                </div>
+                                                <ol className="list-decimal pl-4 space-y-1.5 text-xs text-slate-400 max-w-sm">
+                                                    <li>Open WhatsApp on your mobile phone.</li>
+                                                    <li>Tap Menu (⋮) or Settings (⚙️) and select Linked Devices.</li>
+                                                    <li>Tap "Link a Device", then "Link with phone number instead".</li>
+                                                    <li>Type in the code shown above.</li>
+                                                </ol>
+                                            </div>
+                                        ) : needsAuth && sess.qrText ? (
                                             <div className="space-y-6">
                                                 {/* Mobile Specific Guide Banner */}
                                                 {isMobile && (

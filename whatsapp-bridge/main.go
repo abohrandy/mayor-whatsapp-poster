@@ -35,6 +35,7 @@ type ClientSession struct {
 	Client    *whatsmeow.Client `json:"-"`         // Whatsmeow client instance
 	Status    string           `json:"status"`    // CONNECTED, AUTH_REQUIRED, DISCONNECTED
 	QRText    string           `json:"qrText"`    // current QR code string
+	PairCode  string           `json:"pairCode"`  // current phone-linking code (alternative to QR)
 	LastError string           `json:"lastError"` // last connection or session error
 	mu        sync.Mutex
 }
@@ -91,7 +92,7 @@ func main() {
 	} else {
 		log.Printf("[Bridge] Found %d saved WhatsApp session(s). Connecting...", len(devices))
 		for _, dev := range devices {
-			go startClient(dev)
+			go startClient(dev, "")
 		}
 	}
 
@@ -99,6 +100,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", handleStatus)
 	mux.HandleFunc("/session/new", handleNewSession)
+	mux.HandleFunc("/session/pair-phone", handlePairPhone)
 	mux.HandleFunc("/session/delete", handleDeleteSession)
 	mux.HandleFunc("/send", handleSend)
 	mux.HandleFunc("/groups", handleGroups)
@@ -137,32 +139,9 @@ func main() {
 
 // ── Session Connection Handler ───────────────────────────────────────────────
 
-func startClient(deviceStore *store.Device) {
-	clientLog := waLog.Stdout("Client", "WARN", true)
-	c := whatsmeow.NewClient(deviceStore, clientLog)
-
-	sess := &ClientSession{
-		Status: "DISCONNECTED",
-	}
-
-	// Determine session ID
-	var id string
-	if deviceStore.ID != nil {
-		id = deviceStore.ID.String()
-		sess.ID = id
-		sess.JID = deviceStore.ID
-	} else {
-		id = fmt.Sprintf("temp_%d", time.Now().UnixNano())
-		sess.ID = id
-	}
-
-	sessionsMu.Lock()
-	sessions[id] = sess
-	sessionsMu.Unlock()
-
-	sess.Client = c
-
-	// Handle events
+// registerEventHandlers wires up Connected/Disconnected/LoggedOut handling shared by
+// both the QR-scan flow (startClient) and the phone-number pairing flow (handlePairPhone).
+func registerEventHandlers(c *whatsmeow.Client, sess *ClientSession) {
 	c.AddEventHandler(func(rawEvt interface{}) {
 		switch rawEvt.(type) {
 		case *events.Connected:
@@ -170,12 +149,13 @@ func startClient(deviceStore *store.Device) {
 			sess.Status = "CONNECTED"
 			sess.LastError = ""
 			sess.QRText = ""
+			sess.PairCode = ""
 			// If session was temporary, migrate key in map to JID JID.String()
 			if !strings.Contains(sess.ID, "@") && c.Store.ID != nil {
 				oldID := sess.ID
 				sess.ID = c.Store.ID.String()
 				sess.JID = c.Store.ID
-				
+
 				sessionsMu.Lock()
 				delete(sessions, oldID)
 				sessions[sess.ID] = sess
@@ -193,10 +173,46 @@ func startClient(deviceStore *store.Device) {
 			sess.Status = "DISCONNECTED"
 			sess.LastError = "Logged out from session"
 			sess.QRText = ""
+			sess.PairCode = ""
 			sess.mu.Unlock()
 			log.Printf("[Bridge] Device logged out: %s", sess.ID)
 		}
 	})
+}
+
+// startClient connects a device. presetID is used as the session's map key when the
+// device is brand new (deviceStore.ID == nil) so the caller (handleNewSession) can hand
+// that exact ID back to the client synchronously, instead of guessing it from session
+// state later — that guesswork was the source of a bug where newly-created sessions were
+// never linked to the requesting user, so their QR code silently never appeared.
+func startClient(deviceStore *store.Device, presetID string) {
+	clientLog := waLog.Stdout("Client", "WARN", true)
+	c := whatsmeow.NewClient(deviceStore, clientLog)
+
+	sess := &ClientSession{
+		Status: "DISCONNECTED",
+	}
+
+	// Determine session ID
+	var id string
+	if deviceStore.ID != nil {
+		id = deviceStore.ID.String()
+		sess.ID = id
+		sess.JID = deviceStore.ID
+	} else if presetID != "" {
+		id = presetID
+		sess.ID = id
+	} else {
+		id = fmt.Sprintf("temp_%d", time.Now().UnixNano())
+		sess.ID = id
+	}
+
+	sessionsMu.Lock()
+	sessions[id] = sess
+	sessionsMu.Unlock()
+
+	sess.Client = c
+	registerEventHandlers(c, sess)
 
 	if c.Store.ID == nil {
 		// New device require QR code
@@ -273,6 +289,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 			JID:       sess.JID,
 			Status:    sess.Status,
 			QRText:    sess.QRText,
+			PairCode:  sess.PairCode,
 			LastError: sess.LastError,
 		})
 		sess.mu.Unlock()
@@ -291,11 +308,89 @@ func handleNewSession(w http.ResponseWriter, r *http.Request) {
 	log.Println("[Bridge] Initializing a new WhatsApp session...")
 
 	deviceStore := dbContainer.NewDevice()
-	go startClient(deviceStore)
+	tempID := fmt.Sprintf("temp_%d", time.Now().UnixNano())
+	go startClient(deviceStore, tempID)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
+		"id":      tempID,
 		"message": "Session creation initiated. Scan QR code to authenticate.",
+	})
+}
+
+// handlePairPhone starts a new session using WhatsApp's "link with phone number" flow,
+// which yields an 8-character code the user types into their phone instead of scanning a QR.
+// This is a fallback for when QR scanning isn't practical (or was silently failing).
+func handlePairPhone(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Phone == "" {
+		http.Error(w, "Invalid body. 'phone' (digits only, with country code, no leading +) is required", http.StatusBadRequest)
+		return
+	}
+
+	cleanPhone := regexp.MustCompile(`[^0-9]`).ReplaceAllString(req.Phone, "")
+	if cleanPhone == "" {
+		http.Error(w, "Invalid phone number", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[Bridge] Initializing a new WhatsApp session via phone pairing for %s...", cleanPhone)
+
+	deviceStore := dbContainer.NewDevice()
+	tempID := fmt.Sprintf("temp_%d", time.Now().UnixNano())
+
+	clientLog := waLog.Stdout("Client", "WARN", true)
+	c := whatsmeow.NewClient(deviceStore, clientLog)
+
+	sess := &ClientSession{
+		ID:     tempID,
+		Status: "DISCONNECTED",
+		Client: c,
+	}
+
+	sessionsMu.Lock()
+	sessions[tempID] = sess
+	sessionsMu.Unlock()
+
+	registerEventHandlers(c, sess)
+
+	if err := c.Connect(); err != nil {
+		sessionsMu.Lock()
+		delete(sessions, tempID)
+		sessionsMu.Unlock()
+		http.Error(w, fmt.Sprintf("Failed to connect: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	code, err := c.PairPhone(context.Background(), cleanPhone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+	if err != nil {
+		sess.mu.Lock()
+		sess.LastError = fmt.Sprintf("Failed to generate pairing code: %v", err)
+		sess.mu.Unlock()
+		c.Disconnect()
+		http.Error(w, fmt.Sprintf("Failed to generate pairing code: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	sess.mu.Lock()
+	sess.Status = "AUTH_REQUIRED"
+	sess.PairCode = code
+	sess.mu.Unlock()
+
+	log.Printf("[Bridge] Pairing code generated for session %s: %s", tempID, code)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"id":       tempID,
+		"pairCode": code,
+		"message":  "Enter this code on your phone: WhatsApp > Linked Devices > Link with phone number.",
 	})
 }
 

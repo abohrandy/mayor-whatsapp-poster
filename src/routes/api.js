@@ -221,20 +221,52 @@ router.post('/whatsapp/session/new', requireAuth, requireSubscription, async (re
         }
 
         const result = await waClient.createSession();
-        // Link session to this user in database
-        if (waClient.sessions && waClient.sessions.length > 0) {
-            // Find the session that was just created (it starts as AUTH_REQUIRED or temp ID)
-            const tempSess = waClient.sessions.find(s => s.status === 'AUTH_REQUIRED' && !s.jid);
-            if (tempSess) {
-                await db.run(
-                    'INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)',
-                    [req.user.id, tempSess.id]
-                );
-            }
+        // Link the session to this user using the ID the bridge handed back synchronously.
+        // (Previously this tried to find the new session by scanning `waClient.sessions`,
+        // a property that was never actually populated — so the mapping row was never
+        // created and the new session's QR code could never appear for the requesting user.)
+        if (result?.id) {
+            await db.run(
+                'INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)',
+                [req.user.id, result.id]
+            );
         }
         res.json(result);
     } catch (error) {
         console.error('Error creating session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/whatsapp/session/pair-phone', requireAuth, requireSubscription, async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+
+        const db = await require('../models/database').getDb();
+        const currentSessions = await db.get(
+            'SELECT COUNT(*) as count FROM whatsapp_sessions WHERE user_id = ?',
+            [req.user.id]
+        );
+
+        const userPlan = await db.get('SELECT max_sessions, name FROM subscription_plans WHERE slug = ?', [req.user.tier]);
+        const maxSessions = userPlan?.max_sessions || 1;
+        if (currentSessions.count >= maxSessions) {
+            return res.status(400).json({
+                error: `Your ${userPlan?.name || 'current'} plan only allows linking ${maxSessions} WhatsApp number(s). Please upgrade to a higher plan to link more.`
+            });
+        }
+
+        const result = await waClient.pairPhone(phone);
+        if (result?.id) {
+            await db.run(
+                'INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)',
+                [req.user.id, result.id]
+            );
+        }
+        res.json(result);
+    } catch (error) {
+        console.error('Error pairing session via phone number:', error);
         res.status(500).json({ error: error.message });
     }
 });

@@ -52,6 +52,18 @@ class WhatsAppService {
         }
     }
 
+    async pairPhone(phone) {
+        try {
+            console.log('[WhatsAppService] Requesting phone-pairing code...');
+            const data = await this.adapter.pairPhone(phone);
+            await this.syncStatus();
+            return data;
+        } catch (err) {
+            console.error('[WhatsAppService] Failed to request phone-pairing code:', err.message);
+            throw err;
+        }
+    }
+
     async deleteSession(id) {
         try {
             console.log(`[WhatsAppService] Requesting session deletion for: ${id}...`);
