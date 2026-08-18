@@ -8,9 +8,11 @@ const adminController = {
                 SELECT 
                     u.id, 
                     u.email, 
-                    u.subscription_status, 
-                    u.tier, 
-                    u.trial_ends_at, 
+                    u.subscription_status,
+                    u.tier,
+                    u.trial_ends_at,
+                    u.manual_expires_at,
+                    u.paystack_subscription_code,
                     u.created_at,
                     (SELECT COUNT(*) FROM whatsapp_sessions WHERE user_id = u.id) as sessions_count,
                     (SELECT COUNT(*) FROM announcements WHERE user_id = u.id) as announcements_count
@@ -59,34 +61,54 @@ const adminController = {
             res.status(500).json({ error: 'Failed to override user subscription' });
         }
     },
+    // Manually activate/set a user's plan tier. `days` (optional) grants access for exactly
+    // that many days, after which requireSubscription blocks the account automatically —
+    // this is how we manually onboard customers who couldn't complete Paystack checkout.
+    // Omitting `days` (or passing 0) grants indefinite access, same as a Paystack subscription.
     async updateUserTier(req, res) {
         try {
             const { id } = req.params;
-            const { tier } = req.body; // 'trial' or 'plus'
-            if (!['trial', 'plus'].includes(tier)) {
+            const { tier, days } = req.body;
+
+            const db = await getDb();
+
+            const validSlugs = (await db.all(
+                "SELECT slug FROM subscription_plans WHERE is_active = 1"
+            )).map(p => p.slug);
+            if (!validSlugs.includes(tier)) {
                 return res.status(400).json({ error: 'Invalid tier selection' });
             }
 
-            const db = await getDb();
             const user = await db.get('SELECT email FROM users WHERE id = ?', [id]);
             if (!user) {
                 return res.status(404).json({ error: 'User not found' });
             }
 
-            // If switching to plus, reset trial_ends_at to NULL, otherwise if trial, set it to now + 14 days
             let trialEndsAt = null;
+            let manualExpiresAt = null;
+
             if (tier === 'trial') {
                 const ends = new Date();
                 ends.setDate(ends.getDate() + 14);
                 trialEndsAt = ends.toISOString();
+            } else if (days) {
+                const parsedDays = parseInt(days, 10);
+                if (!Number.isFinite(parsedDays) || parsedDays <= 0) {
+                    return res.status(400).json({ error: 'Days must be a positive number, or omitted for indefinite access.' });
+                }
+                const expires = new Date();
+                expires.setDate(expires.getDate() + parsedDays);
+                manualExpiresAt = expires.toISOString();
             }
 
             await db.run(
-                'UPDATE users SET tier = ?, trial_ends_at = ? WHERE id = ?',
-                [tier, trialEndsAt, id]
+                "UPDATE users SET tier = ?, subscription_status = 'active', trial_ends_at = ?, manual_expires_at = ? WHERE id = ?",
+                [tier, trialEndsAt, manualExpiresAt, id]
             );
 
-            const logMsg = `Admin manually set tier for user ${user.email} to: ${tier.toUpperCase()}`;
+            const logMsg = manualExpiresAt
+                ? `Admin manually activated ${tier.toUpperCase()} for user ${user.email}, expiring ${new Date(manualExpiresAt).toLocaleDateString()}`
+                : `Admin manually set tier for user ${user.email} to: ${tier.toUpperCase()} (no expiry)`;
             console.log(`[Admin] ${logMsg}`);
             await logActivity('admin_override', logMsg, req.user.id);
 
@@ -94,7 +116,8 @@ const adminController = {
                 message: 'User tier updated successfully',
                 userId: id,
                 tier,
-                trial_ends_at: trialEndsAt
+                trial_ends_at: trialEndsAt,
+                manual_expires_at: manualExpiresAt
             });
         } catch (err) {
             console.error('[Admin updateUserTier] Error:', err);

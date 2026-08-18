@@ -16,6 +16,7 @@ import PlanManagement from './components/PlanManagement';
 import AdminAIDashboard from './components/AdminAIDashboard';
 import JobQueueView from './components/JobQueueView';
 import UserGuide from './components/UserGuide';
+import OnboardingWizard from './components/OnboardingWizard';
 import { Cpu, Layers } from 'lucide-react';
 import { useNotifications } from './hooks/useNotifications';
 
@@ -81,6 +82,49 @@ function App() {
     setUser(loggedUser);
   };
 
+  // Onboarding wizard: auto-shows once for a user until dismissed/completed,
+  // and can be restarted on demand from Settings regardless of that state.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingAutoChecked, setOnboardingAutoChecked] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.is_admin && !onboardingAutoChecked) {
+      setOnboardingAutoChecked(true);
+      if (user.onboarding_enabled && !user.onboarding_completed) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [user, onboardingAutoChecked]);
+
+  const closeOnboarding = async () => {
+    setShowOnboarding(false);
+    try {
+      await axios.patch('/api/auth/onboarding', { completed: true });
+      setUser((prev: any) => prev ? { ...prev, onboarding_completed: true } : prev);
+    } catch (err) {
+      console.error('Failed to save onboarding state', err);
+    }
+  };
+
+  const restartOnboarding = async () => {
+    try {
+      await axios.patch('/api/auth/onboarding', { completed: false, enabled: true });
+      setUser((prev: any) => prev ? { ...prev, onboarding_completed: false, onboarding_enabled: true } : prev);
+    } catch (err) {
+      console.error('Failed to restart onboarding', err);
+    }
+    setShowOnboarding(true);
+  };
+
+  const setOnboardingEnabled = async (enabled: boolean) => {
+    try {
+      await axios.patch('/api/auth/onboarding', { enabled });
+      setUser((prev: any) => prev ? { ...prev, onboarding_enabled: enabled } : prev);
+    } catch (err) {
+      console.error('Failed to update onboarding preference', err);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     setToken(null);
@@ -114,7 +158,13 @@ function App() {
       case 'activity': return <ActivityLogs />;
       case 'jobs': return <JobQueueView />;
       case 'whatsapp': return <WhatsAppStatus />;
-      case 'settings': return <Settings user={user} />;
+      case 'settings': return (
+        <Settings
+          user={user}
+          onRestartOnboarding={restartOnboarding}
+          onToggleOnboardingEnabled={setOnboardingEnabled}
+        />
+      );
       case 'users': return <UserManagement />;
       case 'plans': return <PlanManagement />;
       case 'ai-control': return <AdminAIDashboard />;
@@ -189,10 +239,11 @@ function App() {
     );
   }
 
-  // 3. Billing subscription lock / Trial Expired lock
+  // 3. Billing subscription lock / Trial Expired lock / Manually-granted access expired
   const isTrialExpired = user.tier === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) < new Date();
+  const isManualAccessExpired = user.manual_expires_at && new Date(user.manual_expires_at) < new Date();
   const isAdmin = user.is_admin;
-  if (!isAdmin && (user.subscription_status !== 'active' || isTrialExpired)) {
+  if (!isAdmin && (user.subscription_status !== 'active' || isTrialExpired || isManualAccessExpired)) {
     return (
       <Subscription
         user={user}
@@ -308,6 +359,8 @@ function App() {
 
         {renderContent()}
       </main>
+
+      {showOnboarding && <OnboardingWizard onClose={closeOnboarding} />}
     </div>
   );
 }

@@ -53,6 +53,15 @@ async function initDb() {
         }
     }
 
+    if (!usersColumns.some(col => col.name === 'manual_expires_at')) {
+        try { await db.exec("ALTER TABLE users ADD COLUMN manual_expires_at DATETIME DEFAULT NULL"); } catch (err) {}
+    }
+    if (!usersColumns.some(col => col.name === 'onboarding_completed')) {
+        try { await db.exec("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0"); } catch (err) {}
+    }
+    if (!usersColumns.some(col => col.name === 'onboarding_enabled')) {
+        try { await db.exec("ALTER TABLE users ADD COLUMN onboarding_enabled INTEGER DEFAULT 1"); } catch (err) {}
+    }
     if (!usersColumns.some(col => col.name === 'ai_credits_remaining')) {
         try { await db.exec("ALTER TABLE users ADD COLUMN ai_credits_remaining INTEGER DEFAULT 50"); } catch (err) {}
     }

@@ -20,7 +20,7 @@ async function requireAuth(req, res, next) {
 
         const db = await getDb();
         const user = await db.get(
-            'SELECT id, email, subscription_status, paystack_customer_code, paystack_subscription_code, tier, trial_ends_at FROM users WHERE id = ?',
+            'SELECT id, email, subscription_status, paystack_customer_code, paystack_subscription_code, tier, trial_ends_at, manual_expires_at, onboarding_completed, onboarding_enabled FROM users WHERE id = ?',
             [decoded.userId]
         );
 
@@ -60,6 +60,14 @@ function requireSubscription(req, res, next) {
             }
         } else {
             return res.status(403).json({ error: 'Your 14-day free trial has expired. Please subscribe to a Plus plan to proceed.' });
+        }
+    }
+
+    // Check if a manually-granted access window (set by an admin, not tied to Paystack) has expired
+    if (req.user.manual_expires_at) {
+        const expiresAt = new Date(req.user.manual_expires_at);
+        if (expiresAt < new Date()) {
+            return res.status(403).json({ error: 'Your manually granted access has expired. Please subscribe or contact support to renew.' });
         }
     }
 

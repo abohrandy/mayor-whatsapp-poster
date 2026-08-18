@@ -108,9 +108,35 @@ const authController = {
                 subscription_status: req.user.subscription_status,
                 tier: req.user.tier,
                 trial_ends_at: req.user.trial_ends_at,
+                manual_expires_at: req.user.manual_expires_at,
+                onboarding_completed: !!req.user.onboarding_completed,
+                onboarding_enabled: req.user.onboarding_enabled !== 0,
                 is_admin: req.user.email === (process.env.ADMIN_EMAIL || '')
             }
         });
+    },
+
+    // Updates onboarding wizard state: mark completed/dismissed, toggle auto-show, or restart it.
+    async updateOnboarding(req, res) {
+        try {
+            const { completed, enabled } = req.body;
+            const db = await getDb();
+            const user = await db.get('SELECT onboarding_completed, onboarding_enabled FROM users WHERE id = ?', [req.user.id]);
+
+            await db.run(
+                'UPDATE users SET onboarding_completed = ?, onboarding_enabled = ? WHERE id = ?',
+                [
+                    completed !== undefined ? (completed ? 1 : 0) : user.onboarding_completed,
+                    enabled !== undefined ? (enabled ? 1 : 0) : user.onboarding_enabled,
+                    req.user.id
+                ]
+            );
+
+            res.json({ message: 'Onboarding preference updated' });
+        } catch (err) {
+            console.error('[Auth] Error updating onboarding state:', err);
+            res.status(500).json({ error: 'Failed to update onboarding preference' });
+        }
     },
 
     async changePassword(req, res) {

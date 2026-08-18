@@ -8,6 +8,10 @@ import axios from 'axios';
 
 const API = '/api';
 
+// AI features (caption improve/rewrite/etc.) are built but hidden from the UI
+// until OpenRouter usage is funded. Flip to true to re-show the toolbar.
+const AI_FEATURES_ENABLED = false;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface MediaFile { path: string; type: 'image' | 'video'; }
 interface Group { id: string; name: string; isGroup: boolean; }
@@ -756,6 +760,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                 </div>
 
                 {/* AI Assistant Toolbar & Credit System */}
+                {AI_FEATURES_ENABLED && (
                 <div className="bg-slate-900/60 border border-indigo-500/20 rounded-xl p-3 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/40 pb-2">
                     <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
@@ -795,6 +800,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                     <button type="button" onClick={() => handleAIProcess('generate_variations')} disabled={aiLoading || (aiCredits?.remainingCredits === 0)} className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/30 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50">Generate Variations</button>
                   </div>
                 </div>
+                )}
 
                 {form.caption_variations && form.caption_variations.length > 0 ? (
                   <div className="space-y-3 bg-slate-900/50 p-4 border border-slate-700/50 rounded-xl">

@@ -7,6 +7,9 @@ import axios from 'axios';
 
 const API_BASE_URL = '/api';
 
+// AI features are hidden from the UI until OpenRouter usage is funded.
+const AI_FEATURES_ENABLED = false;
+
 const TIMEZONES = [
   'Africa/Lagos',
   'Africa/Accra',
@@ -43,9 +46,11 @@ const LANGUAGES = [
 
 interface SettingsProps {
   user?: any;
+  onRestartOnboarding?: () => void;
+  onToggleOnboardingEnabled?: (enabled: boolean) => void;
 }
 
-const Settings = ({ user: propsUser }: SettingsProps) => {
+const Settings = ({ user: propsUser, onRestartOnboarding, onToggleOnboardingEnabled }: SettingsProps) => {
   const [activeTab, setActiveTab] = useState<'automation' | 'ai' | 'notifications' | 'test' | 'security'>('automation');
   const [settings, setSettings] = useState({
     timezone: 'Africa/Lagos',
@@ -448,6 +453,31 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
                 <Bell className="text-amber-400" size={20} /> Email Notifications &amp; Webhook Triggers
               </h3>
 
+              {!propsUser?.is_admin && (
+                <div className="space-y-3 pb-2 border-b border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Onboarding Wizard</h4>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={propsUser?.onboarding_enabled !== false}
+                      onChange={e => onToggleOnboardingEnabled?.(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-white block">Show wizard automatically for new logins</span>
+                      <span className="text-[11px] text-slate-400">When enabled, new team members see the setup tour the first time they log in.</span>
+                    </div>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onRestartOnboarding?.()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-300 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 rounded-lg cursor-pointer"
+                  >
+                    <RefreshCw size={13} /> Restart Wizard Now
+                  </button>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Email Notification Rules</h4>
 
@@ -477,6 +507,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
                   </div>
                 </label>
 
+                {AI_FEATURES_ENABLED && (
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -489,6 +520,7 @@ const Settings = ({ user: propsUser }: SettingsProps) => {
                     <span className="text-[11px] text-slate-400">Get notified when AI credits drop below 10%.</span>
                   </div>
                 </label>
+                )}
               </div>
 
               {/* Webhook Endpoint */}

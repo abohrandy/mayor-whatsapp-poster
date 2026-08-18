@@ -51,16 +51,58 @@ async function scheduleAnnouncementChecker() {
         await cleanupOldAnnouncementMedia();
     }, { timezone: await getTimezone() });
 
+    // Daily sweep to deactivate manually-activated accounts whose admin-granted window has passed
+    cron.schedule('15 3 * * *', async () => {
+        await deactivateExpiredManualAccounts();
+    }, { timezone: await getTimezone() });
+
     setTimeout(async () => {
         console.log('[Scheduler] Running startup announcement check...');
         await checkAndSendDue();
         await cleanupOldAnnouncementMedia();
+        await deactivateExpiredManualAccounts();
     }, 3000);
 
     const { queueWorker } = require('../queue');
     queueWorker.start();
 
-    console.log(`[Scheduler] Announcement checker (1-min interval), daily media cleanup (retention: ${MEDIA_RETENTION_DAYS}d), and Queue Worker initialized.`);
+    console.log(`[Scheduler] Announcement checker (1-min interval), daily media cleanup (retention: ${MEDIA_RETENTION_DAYS}d), manual-access expiry sweep, and Queue Worker initialized.`);
+}
+
+/**
+ * Flip subscription_status to 'inactive' for accounts an admin manually activated with a
+ * fixed number of days that have since passed. requireSubscription already blocks these
+ * accounts at request-time regardless of this sweep; this just keeps the admin dashboard's
+ * active/inactive counts and status badges accurate instead of showing them as active forever.
+ */
+async function deactivateExpiredManualAccounts() {
+    try {
+        const db = await getDb();
+        const now = new Date().toISOString();
+
+        const expired = await db.all(
+            `SELECT id, email FROM users
+             WHERE subscription_status = 'active'
+               AND manual_expires_at IS NOT NULL
+               AND manual_expires_at <= ?`,
+            [now]
+        );
+
+        if (expired.length === 0) return;
+
+        await db.run(
+            `UPDATE users SET subscription_status = 'inactive'
+             WHERE subscription_status = 'active'
+               AND manual_expires_at IS NOT NULL
+               AND manual_expires_at <= ?`,
+            [now]
+        );
+
+        console.log(`[Scheduler] Deactivated ${expired.length} account(s) whose manually-granted access expired: ${expired.map(u => u.email).join(', ')}`);
+        await logActivity('manual_access_expired', `Auto-deactivated ${expired.length} account(s) after their manually-granted access window expired.`);
+    } catch (error) {
+        console.error('[Scheduler] Error in deactivateExpiredManualAccounts:', error);
+    }
 }
 
 /**
@@ -411,4 +453,4 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     }
 }
 
-module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement, computeNextPostAt, cleanupOldAnnouncementMedia };
+module.exports = { scheduleAnnouncementChecker, checkAndSendDue, sendAnnouncement, computeNextPostAt, cleanupOldAnnouncementMedia, deactivateExpiredManualAccounts };

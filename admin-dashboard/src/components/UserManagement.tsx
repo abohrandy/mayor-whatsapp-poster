@@ -6,22 +6,33 @@ interface SaaSUser {
   id: number;
   email: string;
   subscription_status: 'active' | 'inactive';
-  tier: 'trial' | 'plus';
+  tier: string;
   trial_ends_at: string | null;
+  manual_expires_at: string | null;
   paystack_subscription_code: string | null;
   sessions_count: number;
   announcements_count: number;
   created_at: string;
 }
 
+interface PlanOption {
+  slug: string;
+  name: string;
+  is_trial: number;
+}
+
 const UserManagement = () => {
   const [users, setUsers] = useState<SaaSUser[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionId, setActionId] = useState<number | null>(null);
+  // Per-row draft state for the manual activation form (tier + days to grant)
+  const [activateDrafts, setActivateDrafts] = useState<Record<number, { tier: string; days: string }>>({});
 
   useEffect(() => {
     fetchUsers();
+    fetchPlans();
   }, []);
 
   const fetchUsers = async () => {
@@ -36,6 +47,25 @@ const UserManagement = () => {
     }
   };
 
+  const fetchPlans = async () => {
+    try {
+      const res = await axios.get('/api/plans');
+      setPlans(res.data.plans || []);
+    } catch (err: any) {
+      console.error('Failed to fetch plans:', err);
+    }
+  };
+
+  const getDraft = (userId: number, currentTier: string) =>
+    activateDrafts[userId] || { tier: currentTier, days: '' };
+
+  const setDraft = (userId: number, patch: Partial<{ tier: string; days: string }>) => {
+    setActivateDrafts(prev => ({
+      ...prev,
+      [userId]: { ...(prev[userId] || { tier: '', days: '' }), ...patch }
+    }));
+  };
+
   const handleToggleSubscription = async (userId: number) => {
     setActionId(userId);
     try {
@@ -48,10 +78,15 @@ const UserManagement = () => {
     }
   };
 
-  const handleToggleTier = async (userId: number, newTier: 'trial' | 'plus') => {
+  const handleActivate = async (userId: number, currentTier: string) => {
+    const draft = getDraft(userId, currentTier);
+    if (!draft.tier) return;
     setActionId(userId);
     try {
-      await axios.post(`/api/admin/users/${userId}/tier`, { tier: newTier });
+      await axios.post(`/api/admin/users/${userId}/tier`, {
+        tier: draft.tier,
+        days: draft.days ? parseInt(draft.days, 10) : undefined
+      });
       await fetchUsers();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update user subscription tier.');
@@ -157,7 +192,9 @@ const UserManagement = () => {
                 <tbody className="divide-y divide-slate-800 text-slate-300 text-xs">
                   {filteredUsers.map(user => {
                     const isActive = user.subscription_status === 'active';
-                    const isManualUpgrade = user.tier === 'plus' && !user.paystack_subscription_code;
+                    const isManualUpgrade = user.tier !== 'trial' && !user.paystack_subscription_code;
+                    const manualExpired = !!user.manual_expires_at && new Date(user.manual_expires_at) < new Date();
+                    const draft = getDraft(user.id, user.tier);
                     return (
                       <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
                          <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
@@ -167,7 +204,7 @@ const UserManagement = () => {
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                               {user.subscription_status}
                             </span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'plus' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${user.tier === 'trial' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
                               {user.tier}
                             </span>
                             {isManualUpgrade && (
@@ -175,10 +212,20 @@ const UserManagement = () => {
                                 Manual
                               </span>
                             )}
+                            {manualExpired && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20">
+                                Expired
+                              </span>
+                            )}
                           </div>
                           {user.tier === 'trial' && user.trial_ends_at && (
                             <p className="text-[10px] text-slate-500 font-mono">
-                              Ends: {new Date(user.trial_ends_at).toLocaleDateString('en-GB')}
+                              Trial ends: {new Date(user.trial_ends_at).toLocaleDateString('en-GB')}
+                            </p>
+                          )}
+                          {user.manual_expires_at && (
+                            <p className={`text-[10px] font-mono ${manualExpired ? 'text-red-400' : 'text-slate-500'}`}>
+                              Manual access {manualExpired ? 'ended' : 'ends'}: {new Date(user.manual_expires_at).toLocaleDateString('en-GB')}
                             </p>
                           )}
                         </td>
@@ -196,7 +243,7 @@ const UserManagement = () => {
                             hour: '2-digit', minute: '2-digit'
                           })}
                         </td>
-                        <td className="px-6 py-4 text-right space-y-2">
+                        <td className="px-6 py-4 text-right space-y-2 min-w-[220px]">
                           <button
                             onClick={() => handleToggleSubscription(user.id)}
                             disabled={actionId === user.id}
@@ -210,13 +257,36 @@ const UserManagement = () => {
                               'Grant Access'
                             )}
                           </button>
-                          <button
-                            onClick={() => handleToggleTier(user.id, user.tier === 'plus' ? 'trial' : 'plus')}
-                            disabled={actionId === user.id}
-                            className={`block w-full px-3 py-1.5 rounded text-[10px] font-bold transition-all disabled:opacity-50 cursor-pointer ${user.tier === 'plus' ? 'bg-yellow-500/10 hover:bg-yellow-600 text-yellow-400 hover:text-white' : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white'}`}
-                          >
-                            {user.tier === 'plus' ? 'Downgrade to Trial' : 'Upgrade to Plus'}
-                          </button>
+
+                          {/* Manual activation: pick a plan and optionally a day-count. Leaving days
+                              blank grants indefinite access (same as a normal Paystack subscription);
+                              setting it auto-expires the account via the daily backend sweep. */}
+                          <div className="flex flex-col gap-1.5 p-2 bg-slate-900/50 border border-slate-800 rounded-lg text-left">
+                            <select
+                              value={draft.tier}
+                              onChange={e => setDraft(user.id, { tier: e.target.value })}
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-white focus:outline-none focus:border-primary"
+                            >
+                              {plans.map(p => (
+                                <option key={p.slug} value={p.slug}>{p.name}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              placeholder="Days (blank = forever)"
+                              value={draft.days}
+                              onChange={e => setDraft(user.id, { days: e.target.value })}
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-white focus:outline-none focus:border-primary placeholder-slate-600"
+                            />
+                            <button
+                              onClick={() => handleActivate(user.id, user.tier)}
+                              disabled={actionId === user.id}
+                              className="w-full px-3 py-1.5 rounded text-[10px] font-bold bg-primary/20 hover:bg-primary/30 text-primary transition-all disabled:opacity-50 cursor-pointer"
+                            >
+                              Activate
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
