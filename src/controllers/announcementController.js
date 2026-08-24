@@ -43,7 +43,16 @@ const announcementController = {
                 next_post_at, sender_jid
             } = req.body;
 
-            if (!title) return res.status(400).json({ error: 'Title is required.' });
+            // The title field has occasionally arrived blank from mobile clients despite the
+            // input being filled in on-screen (client-side "required" validation can't be
+            // trusted to have blocked this — see logged fields below for diagnosis). Rather than
+            // hard-failing the save, fall back to the caption or a timestamped placeholder so the
+            // announcement isn't lost, and log enough to catch the real cause if it recurs.
+            let finalTitle = title && String(title).trim();
+            if (!finalTitle) {
+                console.warn('[Announcements] create() received a blank title. Body keys:', Object.keys(req.body || {}), 'files:', Object.keys(req.files || {}));
+                finalTitle = (caption && String(caption).trim().slice(0, 60)) || `Announcement ${new Date().toLocaleString('en-GB')}`;
+            }
 
             const uploadBase = process.env.DATA_DIR
                 ? path.join(process.env.DATA_DIR, 'uploads', 'announcements')
@@ -115,7 +124,7 @@ const announcementController = {
                     (title, caption, caption_variations, caption_index, media_files, is_recurring, recurrence_days, recurrence_days_of_week, sender_jid, post_time, target_groups, target_contacts, target_contact_lists, target_group_lists, target_audience_lists, include_status, ribbon_index, status, next_post_at, user_id)
                  VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?)`,
                 [
-                    title,
+                    finalTitle,
                     caption || '',
                     JSON.stringify(variations),
                     JSON.stringify(mediaFiles),
@@ -136,7 +145,7 @@ const announcementController = {
             );
 
             emitStats(req.user.id, { action: 'create' });
-            await logActivity('announcement_added', `Added announcement: "${title}"`, req.user.id);
+            await logActivity('announcement_added', `Added announcement: "${finalTitle}"`, req.user.id);
             res.status(201).json({ message: 'Announcement created successfully', id: result.lastID });
         } catch (error) {
             console.error('Error creating announcement:', error);

@@ -4,7 +4,9 @@ const fs = require('fs');
 const { getDb, logActivity } = require('../models/database');
 const waClient = require('./whatsapp');
 const { emitLog } = require('./socket');
-const { sendAnnouncementPostedEmail } = require('./email');
+const { sendAnnouncementPostedEmail, sendPaymentReminderEmail } = require('./email');
+
+const PAYMENT_REMINDER_WINDOW_DAYS = 3;
 
 const MEDIA_RETENTION_DAYS = parseInt(process.env.ANNOUNCEMENT_MEDIA_RETENTION_DAYS || '7', 10);
 
@@ -56,11 +58,17 @@ async function scheduleAnnouncementChecker() {
         await deactivateExpiredManualAccounts();
     }, { timezone: await getTimezone() });
 
+    // Daily reminder to users whose trial/manual access is about to expire, so they can pay before losing access
+    cron.schedule('0 8 * * *', async () => {
+        await sendPaymentReminders();
+    }, { timezone: await getTimezone() });
+
     setTimeout(async () => {
         console.log('[Scheduler] Running startup announcement check...');
         await checkAndSendDue();
         await cleanupOldAnnouncementMedia();
         await deactivateExpiredManualAccounts();
+        await sendPaymentReminders();
     }, 3000);
 
     const { queueWorker } = require('../queue');
@@ -102,6 +110,47 @@ async function deactivateExpiredManualAccounts() {
         await logActivity('manual_access_expired', `Auto-deactivated ${expired.length} account(s) after their manually-granted access window expired.`);
     } catch (error) {
         console.error('[Scheduler] Error in deactivateExpiredManualAccounts:', error);
+    }
+}
+
+/**
+ * Email active trial/manually-granted users whose access expires within
+ * PAYMENT_REMINDER_WINDOW_DAYS so they can pay before losing access. Runs daily,
+ * so a user in the window gets one reminder per day until they renew or expire —
+ * intentional, not a dedup bug: it mirrors a normal countdown reminder.
+ * Paystack-recurring accounts are skipped since Paystack handles their own billing reminders.
+ */
+async function sendPaymentReminders() {
+    try {
+        const db = await getDb();
+        const now = new Date();
+        const windowEnd = new Date(now.getTime() + PAYMENT_REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+        const nowIso = now.toISOString();
+
+        const dueSoon = await db.all(
+            `SELECT id, email, tier, trial_ends_at, manual_expires_at FROM users
+             WHERE subscription_status = 'active'
+               AND paystack_subscription_code IS NULL
+               AND (
+                 (tier = 'trial' AND trial_ends_at IS NOT NULL AND trial_ends_at > ? AND trial_ends_at <= ?)
+                 OR (tier != 'trial' AND manual_expires_at IS NOT NULL AND manual_expires_at > ? AND manual_expires_at <= ?)
+               )`,
+            [nowIso, windowEnd, nowIso, windowEnd]
+        );
+
+        for (const user of dueSoon) {
+            const expiresAt = user.tier === 'trial' ? user.trial_ends_at : user.manual_expires_at;
+            const daysLeft = Math.max(1, Math.ceil((new Date(expiresAt) - now) / (24 * 60 * 60 * 1000)));
+
+            sendPaymentReminderEmail(user.email, expiresAt, daysLeft)
+                .catch(err => console.error('[Scheduler] Payment reminder email error:', err));
+        }
+
+        if (dueSoon.length > 0) {
+            console.log(`[Scheduler] Sent payment reminder emails to ${dueSoon.length} user(s): ${dueSoon.map(u => u.email).join(', ')}`);
+        }
+    } catch (error) {
+        console.error('[Scheduler] Error in sendPaymentReminders:', error);
     }
 }
 

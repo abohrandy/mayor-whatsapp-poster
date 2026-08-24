@@ -30,14 +30,23 @@ const uploadsPath = process.env.DATA_DIR
     : path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-// Serve frontend assets
-app.use(express.static(path.join(__dirname, 'admin-dashboard/dist')));
+// Serve frontend assets. index.html must never be cached — it references the current
+// build's hashed JS/CSS filenames, so a stale cached copy on a user's phone can keep
+// running old frontend code (missed bugfixes) indefinitely after a deploy.
+app.use(express.static(path.join(__dirname, 'admin-dashboard/dist'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-store, must-revalidate');
+        }
+    }
+}));
 
 // Routes
 app.use('/api', apiRoutes);
 
 // SPA routing fallback
 app.get('*', (req, res) => {
+    res.set('Cache-Control', 'no-store, must-revalidate');
     res.sendFile(path.join(__dirname, 'admin-dashboard/dist/index.html'));
 });
 

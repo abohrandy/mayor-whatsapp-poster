@@ -236,6 +236,62 @@ async function sendWhatsAppConnectedEmail(userEmail, phoneNumber) {
     await send({ to: userEmail, subject: `WhatsApp account linked to your ${APP_NAME} profile`, html });
 }
 
+/**
+ * Notify user when their WhatsApp session drops/disconnects, so they know to
+ * relink it before their scheduled announcements start failing to send.
+ */
+async function sendWhatsAppDisconnectedEmail(userEmail, phoneNumber) {
+    const html = baseTemplate('WhatsApp Account Disconnected ⚠️', `
+      <p style="color:#94a3b8;line-height:1.7;margin:0 0 20px;">
+        Your linked WhatsApp account has disconnected from ${APP_NAME}. Any scheduled announcements for this session will not be delivered until it's reconnected.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;">
+        ${infoRow('Phone Number', phoneNumber ? `+${phoneNumber}` : 'Unknown')}
+        ${infoRow('Status', badge('Disconnected', '#ef4444'))}
+        ${infoRow('Disconnected At', new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}
+      </table>
+      <p style="color:#94a3b8;font-size:13px;margin-top:20px;line-height:1.6;">
+        This usually happens after logging out from WhatsApp on your phone, a long period offline, or unlinking the device. Head to your WhatsApp Status page to scan a new QR code and reconnect.
+      </p>
+      <a href="${process.env.APP_URL || '#'}" style="display:inline-block;margin-top:16px;padding:11px 24px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px;">Reconnect Now →</a>
+    `);
+
+    await send({ to: userEmail, subject: `⚠️ Your WhatsApp account disconnected from ${APP_NAME}`, html });
+}
+
+/**
+ * Remind a user whose trial or manually-granted access is about to expire that
+ * they need to make a payment to keep uninterrupted access.
+ */
+async function sendPaymentReminderEmail(userEmail, expiresAt, daysLeft) {
+    const expiryDate = new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const urgent = daysLeft <= 1;
+
+    const html = baseTemplate(
+        urgent ? 'Your Access Expires Tomorrow! ⏰' : `Your Access Expires in ${daysLeft} Days`,
+        `<p style="color:#94a3b8;line-height:1.7;margin:0 0 20px;">
+          Your ${APP_NAME} access is set to expire soon. Make a payment now to avoid any interruption to your scheduled announcements.
+        </p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;">
+          ${infoRow('Expires On', `<strong>${expiryDate}</strong>`)}
+          ${infoRow('Days Remaining', badge(`${daysLeft} day${daysLeft === 1 ? '' : 's'}`, urgent ? '#ef4444' : '#f59e0b'))}
+        </table>
+        <p style="color:#94a3b8;line-height:1.7;margin:24px 0;">
+          Once your access expires, your WhatsApp groups will stop receiving scheduled announcements until you renew.
+        </p>
+        <a href="${process.env.APP_URL || '#'}/billing" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">Make Payment →</a>
+      `
+    );
+
+    await send({
+        to: userEmail,
+        subject: urgent
+            ? `⏰ Your ${APP_NAME} access expires tomorrow`
+            : `Reminder: Your ${APP_NAME} access expires in ${daysLeft} days`,
+        html
+    });
+}
+
 module.exports = {
     sendWelcomeEmail,
     sendNewUserAdminAlert,
@@ -243,4 +299,6 @@ module.exports = {
     sendSubscriptionCancelledEmail,
     sendAnnouncementPostedEmail,
     sendWhatsAppConnectedEmail,
+    sendWhatsAppDisconnectedEmail,
+    sendPaymentReminderEmail,
 };

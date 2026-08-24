@@ -1096,11 +1096,14 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white cursor-pointer"
                 >
                   <option value="">Default (First Available Connected Account)</option>
-                  {sessions.filter(s => s.status === 'CONNECTED').map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.jid ? `${s.jid.split('@')[0]} (${s.id})` : s.id}
-                    </option>
-                  ))}
+                  {sessions.filter(s => s.status === 'CONNECTED').map(s => {
+                    const digits = (s.jid || s.id || '').split('@')[0].split(':')[0];
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {digits ? `+${digits}` : s.id}
+                      </option>
+                    );
+                  })}
                 </select>
                 <p className="text-[10px] text-slate-500">
                   Select which connected WhatsApp account will post this announcement. Changing this will reload the target groups below for that account.

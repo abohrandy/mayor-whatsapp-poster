@@ -19,6 +19,7 @@ interface PlanOption {
   slug: string;
   name: string;
   is_trial: number;
+  duration_days: number;
 }
 
 const UserManagement = () => {
@@ -297,9 +298,9 @@ const UserManagement = () => {
                             )}
                           </button>
 
-                          {/* Manual activation: pick a plan and optionally a day-count. Leaving days
-                              blank grants indefinite access (same as a normal Paystack subscription);
-                              setting it auto-expires the account via the daily backend sweep. */}
+                          {/* Manual activation: pick a plan tier. Awards that plan's configured
+                              duration (e.g. 30 days) starting today; use the add/remove-days
+                              control below to extend or pull in the expiry afterwards. */}
                           <div className="flex flex-col gap-1.5 p-2 bg-slate-900/50 border border-slate-800 rounded-lg text-left">
                             <select
                               value={draft.tier}
@@ -307,17 +308,9 @@ const UserManagement = () => {
                               className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-white focus:outline-none focus:border-primary"
                             >
                               {plans.map(p => (
-                                <option key={p.slug} value={p.slug}>{p.name}</option>
+                                <option key={p.slug} value={p.slug}>{p.name} ({p.duration_days}d)</option>
                               ))}
                             </select>
-                            <input
-                              type="number"
-                              min={1}
-                              placeholder="Days (blank = forever)"
-                              value={draft.days}
-                              onChange={e => setDraft(user.id, { days: e.target.value })}
-                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-white focus:outline-none focus:border-primary placeholder-slate-600"
-                            />
                             <button
                               onClick={() => handleActivate(user.id, user.tier)}
                               disabled={actionId === user.id}

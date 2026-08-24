@@ -65,6 +65,10 @@ const adminController = {
     // that many days, after which requireSubscription blocks the account automatically —
     // this is how we manually onboard customers who couldn't complete Paystack checkout.
     // Omitting `days` (or passing 0) grants indefinite access, same as a Paystack subscription.
+    // Activating a plan always awards that plan's configured duration_days (e.g. the
+    // "Monthly Plus" plan grants 30 days) rather than indefinite access — admins extend/reduce
+    // from there afterwards using the separate adjust-days control. `days` may still be passed
+    // explicitly (e.g. by a future caller) to override the plan default for this one grant.
     async updateUserTier(req, res) {
         try {
             const { id } = req.params;
@@ -72,10 +76,11 @@ const adminController = {
 
             const db = await getDb();
 
-            const validSlugs = (await db.all(
-                "SELECT slug FROM subscription_plans WHERE is_active = 1"
-            )).map(p => p.slug);
-            if (!validSlugs.includes(tier)) {
+            const plan = await db.get(
+                "SELECT slug, duration_days FROM subscription_plans WHERE slug = ? AND is_active = 1",
+                [tier]
+            );
+            if (!plan) {
                 return res.status(400).json({ error: 'Invalid tier selection' });
             }
 
@@ -87,17 +92,17 @@ const adminController = {
             let trialEndsAt = null;
             let manualExpiresAt = null;
 
+            const parsedDays = days !== undefined ? parseInt(days, 10) : plan.duration_days;
+            if (!Number.isFinite(parsedDays) || parsedDays <= 0) {
+                return res.status(400).json({ error: 'This plan has no valid duration configured. Set duration_days on the plan or pass days explicitly.' });
+            }
+
+            const expires = new Date();
+            expires.setDate(expires.getDate() + parsedDays);
+
             if (tier === 'trial') {
-                const ends = new Date();
-                ends.setDate(ends.getDate() + 14);
-                trialEndsAt = ends.toISOString();
-            } else if (days) {
-                const parsedDays = parseInt(days, 10);
-                if (!Number.isFinite(parsedDays) || parsedDays <= 0) {
-                    return res.status(400).json({ error: 'Days must be a positive number, or omitted for indefinite access.' });
-                }
-                const expires = new Date();
-                expires.setDate(expires.getDate() + parsedDays);
+                trialEndsAt = expires.toISOString();
+            } else {
                 manualExpiresAt = expires.toISOString();
             }
 
@@ -106,9 +111,7 @@ const adminController = {
                 [tier, trialEndsAt, manualExpiresAt, id]
             );
 
-            const logMsg = manualExpiresAt
-                ? `Admin manually activated ${tier.toUpperCase()} for user ${user.email}, expiring ${new Date(manualExpiresAt).toLocaleDateString()}`
-                : `Admin manually set tier for user ${user.email} to: ${tier.toUpperCase()} (no expiry)`;
+            const logMsg = `Admin manually activated ${tier.toUpperCase()} for user ${user.email}, expiring ${expires.toLocaleDateString()} (${parsedDays} day(s))`;
             console.log(`[Admin] ${logMsg}`);
             await logActivity('admin_override', logMsg, req.user.id);
 

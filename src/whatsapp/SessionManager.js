@@ -1,4 +1,4 @@
-const { sendWhatsAppConnectedEmail } = require('../services/email');
+const { sendWhatsAppConnectedEmail, sendWhatsAppDisconnectedEmail } = require('../services/email');
 
 class SessionManager {
     constructor() {
@@ -71,6 +71,34 @@ class SessionManager {
                         }, 5000);
                     }
                 }
+            }
+        }
+
+        // Detect connected -> disconnected transitions so the owner can relink before
+        // their scheduled announcements start silently failing to send.
+        for (const oldSess of oldSessions) {
+            if (oldSess.status !== 'CONNECTED') continue;
+            const stillConnected = this.sessions.find(s => s.id === oldSess.id && s.status === 'CONNECTED');
+            if (stillConnected) continue;
+
+            const mapping = await db.get('SELECT user_id FROM whatsapp_sessions WHERE session_id = ?', [oldSess.id]);
+            if (!mapping) continue;
+
+            emitLog(mapping.user_id, {
+                type: 'error',
+                message: `WhatsApp session disconnected: ${oldSess.jid?.user || oldSess.id}`,
+                timestamp: new Date().toISOString()
+            });
+
+            try {
+                const userRow = await db.get('SELECT email FROM users WHERE id = ?', [mapping.user_id]);
+                if (userRow) {
+                    const phoneNumber = oldSess.jid?.user || null;
+                    sendWhatsAppDisconnectedEmail(userRow.email, phoneNumber)
+                        .catch(err => console.error('[SessionManager] Disconnected email error:', err));
+                }
+            } catch (err) {
+                console.error('[SessionManager] Failed to send disconnected email:', err);
             }
         }
     }
