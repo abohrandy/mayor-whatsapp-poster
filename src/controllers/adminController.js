@@ -125,6 +125,61 @@ const adminController = {
         }
     },
 
+    // Nudge a user's access expiry by N days (positive extends, negative pulls it in) without
+    // resetting their tier/status like updateUserTier does. Trial users adjust trial_ends_at;
+    // everyone else adjusts manual_expires_at (created from "now" if the user had no expiry yet,
+    // e.g. an indefinite manual grant or a Paystack-recurring account).
+    async adjustUserDays(req, res) {
+        try {
+            const { id } = req.params;
+            const { days } = req.body;
+            const parsedDays = parseInt(days, 10);
+            if (!Number.isFinite(parsedDays) || parsedDays === 0) {
+                return res.status(400).json({ error: 'Days must be a non-zero number.' });
+            }
+
+            const db = await getDb();
+            const user = await db.get('SELECT email, tier, trial_ends_at, manual_expires_at FROM users WHERE id = ?', [id]);
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (user.email === req.user.email) {
+                return res.status(400).json({ error: 'Cannot modify your own administrator account access.' });
+            }
+
+            const field = user.tier === 'trial' ? 'trial_ends_at' : 'manual_expires_at';
+            const currentValue = user[field];
+            const now = new Date();
+            // Extending a lapsed expiry should count from today, not compound onto a stale past date.
+            const base = (currentValue && !(new Date(currentValue) < now && parsedDays > 0))
+                ? new Date(currentValue)
+                : now;
+            base.setDate(base.getDate() + parsedDays);
+
+            const newStatus = base > now ? 'active' : 'inactive';
+
+            await db.run(
+                `UPDATE users SET ${field} = ?, subscription_status = ? WHERE id = ?`,
+                [base.toISOString(), newStatus, id]
+            );
+
+            const logMsg = `Admin ${parsedDays > 0 ? 'added' : 'removed'} ${Math.abs(parsedDays)} day(s) ${parsedDays > 0 ? 'to' : 'from'} ${user.email}'s access (new expiry: ${base.toLocaleDateString()})`;
+            console.log(`[Admin] ${logMsg}`);
+            await logActivity('admin_override', logMsg, req.user.id);
+
+            res.json({
+                message: 'User access days updated successfully',
+                userId: id,
+                [field]: base.toISOString(),
+                subscription_status: newStatus
+            });
+        } catch (err) {
+            console.error('[Admin adjustUserDays] Error:', err);
+            res.status(500).json({ error: 'Failed to adjust user access days' });
+        }
+    },
+
     async stats(req, res) {
         try {
             const db = await getDb();

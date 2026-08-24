@@ -487,6 +487,7 @@ router.delete('/profiles/:id', requireAuth, requireSubscription, audienceListCon
 router.get('/admin/users', requireAuth, requireAdmin, adminController.listUsers);
 router.post('/admin/users/:id/subscription', requireAuth, requireAdmin, adminController.toggleUserSubscription);
 router.post('/admin/users/:id/tier', requireAuth, requireAdmin, adminController.updateUserTier);
+router.post('/admin/users/:id/adjust-days', requireAuth, requireAdmin, adminController.adjustUserDays);
 router.get('/admin/stats', requireAuth, requireAdmin, adminController.stats);
 
 // ── Subscription Plan Management (Admin Only) ────────────────────────────────

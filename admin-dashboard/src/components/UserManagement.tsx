@@ -29,6 +29,8 @@ const UserManagement = () => {
   const [actionId, setActionId] = useState<number | null>(null);
   // Per-row draft state for the manual activation form (tier + days to grant)
   const [activateDrafts, setActivateDrafts] = useState<Record<number, { tier: string; days: string }>>({});
+  // Per-row draft state for the quick add/remove-days control
+  const [dayAdjustDrafts, setDayAdjustDrafts] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchUsers();
@@ -90,6 +92,25 @@ const UserManagement = () => {
       await fetchUsers();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update user subscription tier.');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleAdjustDays = async (userId: number, sign: 1 | -1) => {
+    const raw = dayAdjustDrafts[userId];
+    const amount = parseInt(raw, 10);
+    if (!raw || !Number.isFinite(amount) || amount <= 0) {
+      alert('Enter a positive number of days to add or remove.');
+      return;
+    }
+    setActionId(userId);
+    try {
+      await axios.post(`/api/admin/users/${userId}/adjust-days`, { days: amount * sign });
+      setDayAdjustDrafts(prev => ({ ...prev, [userId]: '' }));
+      await fetchUsers();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to adjust user access days.');
     } finally {
       setActionId(null);
     }
@@ -185,6 +206,7 @@ const UserManagement = () => {
                     <th className="px-6 py-4">Email Address</th>
                     <th className="px-6 py-4">Plan Details</th>
                     <th className="px-6 py-4">Usage Metrics</th>
+                    <th className="px-6 py-4">Next Payment</th>
                     <th className="px-6 py-4">Signup Date</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
@@ -195,6 +217,12 @@ const UserManagement = () => {
                     const isManualUpgrade = user.tier !== 'trial' && !user.paystack_subscription_code;
                     const manualExpired = !!user.manual_expires_at && new Date(user.manual_expires_at) < new Date();
                     const draft = getDraft(user.id, user.tier);
+                    // "Next payment" = whichever expiry actually governs this account's access.
+                    // Trial and manually-granted accounts auto-expire on a known date; a live
+                    // Paystack subscription renews on Paystack's own schedule (not tracked locally).
+                    const nextPaymentDate = user.tier === 'trial' ? user.trial_ends_at : user.manual_expires_at;
+                    const nextPaymentExpired = !!nextPaymentDate && new Date(nextPaymentDate) < new Date();
+                    const dayAdjustValue = dayAdjustDrafts[user.id] || '';
                     return (
                       <tr key={user.id} className="hover:bg-slate-900/20 transition-colors">
                          <td className="px-6 py-4 text-slate-500 font-mono font-medium">#{user.id}</td>
@@ -236,6 +264,17 @@ const UserManagement = () => {
                           <p className="text-slate-400">
                             Announcements: <strong className="text-white font-mono">{user.announcements_count || 0}</strong>
                           </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          {nextPaymentDate ? (
+                            <span className={`font-mono ${nextPaymentExpired ? 'text-red-400' : 'text-slate-300'}`}>
+                              {new Date(nextPaymentDate).toLocaleDateString('en-GB')}
+                            </span>
+                          ) : user.paystack_subscription_code ? (
+                            <span className="text-[10px] text-cyan-400 uppercase font-bold">Recurring (Paystack)</span>
+                          ) : (
+                            <span className="text-slate-600">No expiry</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-slate-400">
                           {new Date(user.created_at).toLocaleDateString('en-GB', {
@@ -286,6 +325,35 @@ const UserManagement = () => {
                             >
                               Activate
                             </button>
+                          </div>
+
+                          {/* Quick nudge: extend or pull in the existing expiry by N days without
+                              touching tier/status, e.g. to grant a grace period or claw back access. */}
+                          <div className="flex flex-col gap-1.5 p-2 bg-slate-900/50 border border-slate-800 rounded-lg text-left">
+                            <input
+                              type="number"
+                              min={1}
+                              placeholder="Days to add/remove"
+                              value={dayAdjustValue}
+                              onChange={e => setDayAdjustDrafts(prev => ({ ...prev, [user.id]: e.target.value }))}
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-[10px] text-white focus:outline-none focus:border-primary placeholder-slate-600"
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleAdjustDays(user.id, 1)}
+                                disabled={actionId === user.id}
+                                className="flex-1 px-3 py-1.5 rounded text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-600 text-emerald-400 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
+                              >
+                                + Add Days
+                              </button>
+                              <button
+                                onClick={() => handleAdjustDays(user.id, -1)}
+                                disabled={actionId === user.id}
+                                className="flex-1 px-3 py-1.5 rounded text-[10px] font-bold bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
+                              >
+                                − Remove
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
