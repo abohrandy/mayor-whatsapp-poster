@@ -139,6 +139,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
   // Existing media files (when editing)
   const [existingMedia, setExistingMedia] = useState<MediaFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -392,6 +393,14 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!form.title || !form.title.trim()) {
+      alert('Please enter a title for this announcement.');
+      titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      titleInputRef.current?.focus();
+      return;
+    }
+
     const hasAnyTarget = form.target_groups.length > 0 ||
       form.target_contacts.length > 0 ||
       form.target_contact_lists.length > 0 ||
@@ -481,6 +490,13 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
   };
 
   const handleSaveAndPostNow = async () => {
+    if (!form.title || !form.title.trim()) {
+      alert('Please enter a title for this announcement.');
+      titleInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      titleInputRef.current?.focus();
+      return;
+    }
+
     if (form.target_groups.length === 0) {
       alert('Please select at least one target group.');
       return;
@@ -724,6 +740,7 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-400">Title *</label>
                 <input
+                  ref={titleInputRef}
                   required type="text"
                   className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-lg focus:border-primary outline-none text-white"
                   placeholder="Announcement title"

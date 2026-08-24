@@ -158,6 +158,8 @@ const announcementController = {
             const existing = await db.get('SELECT * FROM announcements WHERE id = ? AND user_id = ?', [id, req.user.id]);
             if (!existing) return res.status(404).json({ error: 'Announcement not found.' });
 
+            const finalTitle = (title && String(title).trim()) ? title : existing.title;
+
             const uploadBase = process.env.DATA_DIR
                 ? path.join(process.env.DATA_DIR, 'uploads', 'announcements')
                 : path.join('uploads', 'announcements');
@@ -230,7 +232,7 @@ const announcementController = {
                      include_status = ?, next_post_at = ?
                  WHERE id = ? AND user_id = ?`,
                 [
-                    title,
+                    finalTitle,
                     caption || '',
                     JSON.stringify(variations),
                     JSON.stringify(mediaFiles),
@@ -252,7 +254,7 @@ const announcementController = {
             );
 
             emitStats(req.user.id, { action: 'update' });
-            await logActivity('announcement_updated', `Updated announcement: "${title}"`, req.user.id);
+            await logActivity('announcement_updated', `Updated announcement: "${finalTitle}"`, req.user.id);
             res.json({ message: 'Announcement updated successfully.' });
         } catch (error) {
             console.error('Error updating announcement:', error);
