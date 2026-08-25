@@ -148,12 +148,6 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
     }
   };
 
-  const toggleGroupSelection = (id: string) => {
-    setSelectedGroups(prev =>
-      prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]
-    );
-  };
-
   const toggleContactListSelection = (id: number) => {
     setSelectedContactListIds(prev =>
       prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]
@@ -164,16 +158,6 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
     setSelectedGroupListIds(prev =>
       prev.includes(id) ? prev.filter(gId => gId !== id) : [...prev, id]
     );
-  };
-
-  const selectAllFilteredGroups = (filtered: Group[]) => {
-    const filteredIds = filtered.map(g => g.id);
-    const allSelected = filteredIds.every(id => selectedGroups.includes(id));
-    if (allSelected) {
-      setSelectedGroups(prev => prev.filter(id => !filteredIds.includes(id)));
-    } else {
-      setSelectedGroups(prev => [...new Set([...prev, ...filteredIds])]);
-    }
   };
 
   const filteredGroups = groups.filter(g =>
