@@ -39,7 +39,7 @@ const announcementController = {
             const {
                 title, caption, caption_variations, is_recurring, recurrence_days,
                 recurrence_days_of_week, post_time, target_groups, target_contacts,
-                target_contact_lists, target_audience_lists, include_status,
+                target_contact_lists, target_group_lists, target_audience_lists, include_status,
                 next_post_at, sender_jid
             } = req.body;
 

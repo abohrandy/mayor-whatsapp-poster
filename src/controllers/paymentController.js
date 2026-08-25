@@ -116,8 +116,11 @@ const paymentController = {
                 case 'charge.success':
                     // Activate subscription and upgrade to the dynamically determined plan tier
                     const planSlug = event.data.metadata?.plan_slug || 'premium';
+                    // A real Paystack activation supersedes any admin-granted manual expiry window —
+                    // otherwise a user manually onboarded earlier stays permanently blocked by
+                    // requireSubscription's manual_expires_at check even after they've paid.
                     await db.run(
-                        `UPDATE users SET subscription_status = 'active', tier = ?, trial_ends_at = NULL, paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
+                        `UPDATE users SET subscription_status = 'active', tier = ?, trial_ends_at = NULL, manual_expires_at = NULL, paystack_customer_code = ?, paystack_subscription_code = ? WHERE id = ?`,
                         [
                             planSlug,
                             event.data.customer.customer_code || null,

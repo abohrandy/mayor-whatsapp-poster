@@ -63,8 +63,11 @@ function requireSubscription(req, res, next) {
         }
     }
 
-    // Check if a manually-granted access window (set by an admin, not tied to Paystack) has expired
-    if (req.user.manual_expires_at) {
+    // Check if a manually-granted access window (set by an admin, not tied to Paystack) has expired.
+    // Skip this for users with an active Paystack subscription code — a real, paying subscription
+    // must never be blocked by a stale manual grant left over from before they paid (the webhook
+    // clears manual_expires_at on activation, but this is a second line of defense in case it doesn't).
+    if (req.user.manual_expires_at && !req.user.paystack_subscription_code) {
         const expiresAt = new Date(req.user.manual_expires_at);
         if (expiresAt < new Date()) {
             return res.status(403).json({ error: 'Your manually granted access has expired. Please subscribe or contact support to renew.' });
