@@ -86,8 +86,8 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
       alert('Please enter an audience list name.');
       return;
     }
-    if (selectedGroups.length === 0 && selectedContactListIds.length === 0 && selectedGroupListIds.length === 0) {
-      alert('Please select at least one WhatsApp group, Group List, or Contact List.');
+    if (selectedContactListIds.length === 0 && selectedGroupListIds.length === 0) {
+      alert('Please select at least one Contact List or Group List.');
       return;
     }
 
@@ -247,7 +247,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-white">Audience Lists</h3>
-          <p className="text-slate-400 text-sm">Combine WhatsApp group chats and Contact Lists into unified targeting profiles.</p>
+          <p className="text-slate-400 text-sm">Combine Contact Lists and Group Lists into unified targeting profiles.</p>
         </div>
         {!isCreating && (
           <button
@@ -299,9 +299,9 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
             </div>
 
             {/* Contact Lists Selection */}
-            {contactLists.length > 0 && (
-              <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Include Contact Lists ({selectedContactListIds.length} selected)</label>
+            <div>
+              <label className="block text-slate-300 text-sm font-medium mb-2">Include Contact Lists ({selectedContactListIds.length} selected)</label>
+              {contactLists.length > 0 ? (
                 <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
                   {contactLists.map(cl => (
                     <div
@@ -323,13 +323,17 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-slate-500 text-xs bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                  No Contact Lists yet. Create one under the "Contact Lists" tab first.
+                </p>
+              )}
+            </div>
 
             {/* Saved Group Lists Selection */}
-            {groupLists.length > 0 && (
-              <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">Include Saved Group Lists ({selectedGroupListIds.length} selected)</label>
+            <div>
+              <label className="block text-slate-300 text-sm font-medium mb-2">Include Group Lists ({selectedGroupListIds.length} selected)</label>
+              {groupLists.length > 0 ? (
                 <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-2 max-h-40 overflow-y-auto space-y-1">
                   {groupLists.map(gl => (
                     <div
@@ -351,61 +355,11 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* WhatsApp Groups Selection */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-slate-300 text-sm font-medium">Include WhatsApp Groups ({selectedGroups.length} selected)</label>
-                <button
-                  type="button"
-                  onClick={() => selectAllFilteredGroups(filteredGroups)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
-                >
-                  Select/Deselect Filtered
-                </button>
-              </div>
-
-              {/* Search Groups */}
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-2.5 text-slate-500" size={16} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Search WhatsApp groups..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-
-              <div className="bg-slate-900/50 border border-slate-800 rounded-xl max-h-52 overflow-y-auto p-2 space-y-1">
-                {filteredGroups.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center py-4">No groups found. Link WhatsApp status or search another term.</p>
-                ) : (
-                  filteredGroups.map(g => (
-                    <div
-                      key={g.id}
-                      onClick={() => toggleGroupSelection(g.id)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedGroups.includes(g.id)
-                          ? 'bg-indigo-600/20 border border-indigo-500/30'
-                          : 'hover:bg-slate-800'
-                      }`}
-                    >
-                      {selectedGroups.includes(g.id) ? (
-                        <CheckSquare size={16} className="text-indigo-400" />
-                      ) : (
-                        <Square size={16} className="text-slate-500" />
-                      )}
-                      <div>
-                        <span className="text-slate-200 text-sm font-medium">{g.name}</span>
-                        <span className="text-[10px] text-slate-500 block">{g.id}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              ) : (
+                <p className="text-slate-500 text-xs bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+                  No Group Lists yet. Create one under the "Group Lists" tab first.
+                </p>
+              )}
             </div>
           </div>
 
@@ -438,7 +392,7 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
           </div>
           <h3 className="text-lg font-semibold text-white">No Audience Lists Yet</h3>
           <p className="text-slate-400 text-sm max-w-sm mx-auto">
-            Create lists combining WhatsApp groups and Contact Lists to broadcast announcements seamlessly.
+            Create lists combining Contact Lists and Group Lists to broadcast announcements seamlessly.
           </p>
           <button
             onClick={() => setIsCreating(true)}
@@ -456,9 +410,11 @@ const AudienceLists = ({ showGroupsOnly = false, onSwitchToCreateAudience, initi
                   <h4 className="text-lg font-semibold text-white">{l.name}</h4>
                   {l.description && <p className="text-slate-400 text-xs mt-0.5">{l.description}</p>}
                   <div className="flex flex-wrap gap-2 mt-2">
-                    <span className="text-xs bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-md font-medium">
-                      {(l.groups || []).length} groups
-                    </span>
+                    {(l.groups || []).length > 0 && (
+                      <span className="text-xs bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-md font-medium">
+                        {(l.groups || []).length} groups (legacy)
+                      </span>
+                    )}
                     {(l.group_list_ids || []).length > 0 && (
                       <span className="text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-md font-medium flex items-center gap-1">
                         <Users size={11} /> {l.group_list_ids?.length} group lists
