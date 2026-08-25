@@ -497,8 +497,15 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       return;
     }
 
-    if (form.target_groups.length === 0) {
-      alert('Please select at least one target group.');
+    const hasAnyTarget = form.target_groups.length > 0 ||
+      form.target_contacts.length > 0 ||
+      form.target_contact_lists.length > 0 ||
+      form.target_group_lists.length > 0 ||
+      form.target_audience_lists.length > 0 ||
+      form.include_status;
+
+    if (!hasAnyTarget) {
+      alert('Please select at least one target destination (Groups, Contacts, Contact Lists, Group Lists, Audience Lists, or WhatsApp Status).');
       return;
     }
 
@@ -511,6 +518,11 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
       fd.append('is_recurring', form.is_recurring ? '1' : '0');
       fd.append('post_time', form.post_time);
       fd.append('target_groups', JSON.stringify(form.target_groups));
+      fd.append('target_contacts', JSON.stringify(form.target_contacts));
+      fd.append('target_contact_lists', JSON.stringify(form.target_contact_lists));
+      fd.append('target_group_lists', JSON.stringify(form.target_group_lists));
+      fd.append('target_audience_lists', JSON.stringify(form.target_audience_lists));
+      fd.append('include_status', form.include_status ? '1' : '0');
       fd.append('keep_media', '1');
       fd.append('sender_jid', form.sender_jid || '');
 
