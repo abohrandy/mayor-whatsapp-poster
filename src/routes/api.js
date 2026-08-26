@@ -69,8 +69,14 @@ router.post('/whatsapp/sync-contacts', requireAuth, requireSubscription, async (
             if (mapping) targetSessionJid = mapping.session_id;
         }
         if (!targetSessionJid) {
-            const first = await db.get('SELECT session_id FROM whatsapp_sessions WHERE user_id = ? LIMIT 1', [req.user.id]);
-            if (first) targetSessionJid = first.session_id;
+            // Prefer a session the bridge currently reports as CONNECTED — a stale, never-
+            // connected "temp_..." row from an abandoned QR-scan attempt can otherwise be
+            // picked over the user's real, working session.
+            const mappings = await db.all('SELECT session_id FROM whatsapp_sessions WHERE user_id = ?', [req.user.id]);
+            const mappedIds = new Set(mappings.map(m => m.session_id));
+            const liveStatus = waClient.getStatus();
+            const connSess = (liveStatus?.sessions || []).find(s => mappedIds.has(s.id) && s.status === 'CONNECTED');
+            targetSessionJid = connSess ? connSess.id : (mappings[0] && mappings[0].session_id);
         }
 
         if (!targetSessionJid) {

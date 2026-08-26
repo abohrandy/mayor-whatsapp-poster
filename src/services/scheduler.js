@@ -277,25 +277,34 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
     let senderJid = ann.sender_jid;
     if (!senderJid) {
         try {
-            const userSession = await db.get(
-                "SELECT session_id FROM whatsapp_sessions WHERE user_id = ? LIMIT 1",
+            // A user can accumulate multiple rows here (e.g. an abandoned QR-scan attempt
+            // leaves a stale, never-connected "temp_..." session_id behind), so picking the
+            // first row by insertion order can hand back a dead session while a genuinely
+            // connected one sits right next to it. Prefer whichever of the user's own
+            // sessions the bridge currently reports as CONNECTED.
+            const userSessions = await db.all(
+                "SELECT session_id FROM whatsapp_sessions WHERE user_id = ?",
                 [ann.user_id]
             );
-            if (userSession) {
-                senderJid = userSession.session_id;
-            } else {
+            const userSessionIds = new Set(userSessions.map(s => s.session_id));
+            const status = await waClient.getStatus();
+            const bridgeSessions = (status && status.sessions) || [];
+            const connSess = bridgeSessions.find(s => userSessionIds.has(s.id) && s.status === 'CONNECTED');
+
+            if (connSess) {
+                senderJid = connSess.id;
+            } else if (userSessions.length > 0) {
+                senderJid = userSessions[0].session_id;
+            } else if (bridgeSessions.length > 0) {
                 // Try retrieving active session from waClient directly
-                const status = await waClient.getStatus();
-                if (status && status.sessions && status.sessions.length > 0) {
-                    const connSess = status.sessions.find(s => s.status === 'CONNECTED') || status.sessions[0];
-                    if (connSess) {
-                        senderJid = connSess.id;
-                        await db.run(
-                            "INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)",
-                            [ann.user_id || 1, senderJid]
-                        );
-                        console.log(`[Scheduler] Auto-bound active bridge session ${senderJid} to user ${ann.user_id || 1}`);
-                    }
+                const fallback = bridgeSessions.find(s => s.status === 'CONNECTED') || bridgeSessions[0];
+                if (fallback) {
+                    senderJid = fallback.id;
+                    await db.run(
+                        "INSERT OR IGNORE INTO whatsapp_sessions (user_id, session_id) VALUES (?, ?)",
+                        [ann.user_id || 1, senderJid]
+                    );
+                    console.log(`[Scheduler] Auto-bound active bridge session ${senderJid} to user ${ann.user_id || 1}`);
                 }
             }
         } catch (sessErr) {
