@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Wifi, ArrowUpRight, FileText, Send, RefreshCw, HelpCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
+import SetupChecklist from './SetupChecklist';
 
 const socket = io({
     auth: {
@@ -31,6 +32,9 @@ const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
     const [upcoming, setUpcoming] = useState([]);
     const [logs, setLogs] = useState([]);
     const [postingId, setPostingId] = useState<number | null>(null);
+    // Only used to decide whether to show the plain "revisit the tutorial" banner in place
+    // of the SetupChecklist once it's finished hiding itself (i.e. real setup is complete).
+    const [setupComplete, setSetupComplete] = useState(false);
 
     const fetchData = async () => {
         try {
@@ -60,6 +64,15 @@ const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
         }
     };
 
+    const fetchSetupProgress = async () => {
+        try {
+            const res = await axios.get('/api/onboarding/progress');
+            setSetupComplete(!!res.data.all_complete);
+        } catch (error) {
+            console.error('Failed to fetch setup progress:', error);
+        }
+    };
+
     const handlePostNow = async (id: number) => {
         if (!window.confirm('Post this announcement to all target groups right now?')) return;
         setPostingId(id);
@@ -76,6 +89,7 @@ const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
 
     useEffect(() => {
         fetchData();
+        fetchSetupProgress();
 
         socket.on('stats_update', () => fetchData());
         socket.on('whatsapp_status', (data) => {
@@ -90,24 +104,29 @@ const Dashboard = ({ setActiveTab, triggerNewAnnouncement }: any) => {
 
     return (
         <div className="space-y-8">
-            {/* User Guide Banner */}
-            <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
-                        <HelpCircle size={20} />
+            {/* Setup checklist takes priority while real setup is incomplete; once all three
+                steps are actually done it renders nothing and this falls back to a plain,
+                low-key link to the tutorial for anyone who wants to revisit it. */}
+            <SetupChecklist setActiveTab={setActiveTab} triggerNewAnnouncement={triggerNewAnnouncement} />
+            {setupComplete && (
+                <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+                            <HelpCircle size={20} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-white text-sm">Need a refresher?</h4>
+                            <p className="text-xs text-slate-300 leading-relaxed">Revisit the step-by-step tutorial any time from here.</p>
+                        </div>
                     </div>
-                    <div>
-                        <h4 className="font-bold text-white text-sm">First time here?</h4>
-                        <p className="text-xs text-slate-300 leading-relaxed">Read our step-by-step tutorial to link your phone and post announcements safely.</p>
-                    </div>
+                    <button
+                        onClick={() => setActiveTab('guide')}
+                        className="shrink-0 text-xs font-black text-indigo-400 hover:text-white uppercase tracking-wider bg-indigo-500/10 hover:bg-indigo-500/30 border border-indigo-500/30 px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1"
+                    >
+                        Open User Guide →
+                    </button>
                 </div>
-                <button 
-                    onClick={() => setActiveTab('guide')}
-                    className="shrink-0 text-xs font-black text-indigo-400 hover:text-white uppercase tracking-wider bg-indigo-500/10 hover:bg-indigo-500/30 border border-indigo-500/30 px-3 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1"
-                >
-                    Open User Guide →
-                </button>
-            </div>
+            )}
 
             {/* Quick Actions Panel */}
             <div className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

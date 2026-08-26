@@ -82,34 +82,47 @@ function App() {
     setUser(loggedUser);
   };
 
-  // Onboarding wizard: auto-shows once for a user until dismissed/completed,
-  // and can be restarted on demand from Settings regardless of that state.
+  // Onboarding wizard: re-prompts on every fresh login until the user has actually finished
+  // real-world setup (WhatsApp linked, a Group List created, a post scheduled) — not just
+  // until they've clicked through or dismissed the modal once. Skipping only hides it for
+  // this session; whether it comes back next time is driven entirely by live progress, so a
+  // "Finish" click on step 1 of 4 doesn't silence it forever. "Show wizard automatically" in
+  // Settings remains a hard off-switch regardless of progress.
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingAutoChecked, setOnboardingAutoChecked] = useState(false);
+  const [setupProgress, setSetupProgress] = useState<null | {
+    whatsapp_linked: boolean;
+    group_list_created: boolean;
+    post_scheduled: boolean;
+    all_complete: boolean;
+  }>(null);
 
   useEffect(() => {
-    if (user && !user.is_admin && !onboardingAutoChecked) {
+    if (!user || user.is_admin) return;
+    let cancelled = false;
+    axios.get('/api/onboarding/progress')
+      .then(res => { if (!cancelled) setSetupProgress(res.data); })
+      .catch(err => console.error('Failed to load setup progress', err));
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && !user.is_admin && setupProgress && !onboardingAutoChecked) {
       setOnboardingAutoChecked(true);
-      if (user.onboarding_enabled && !user.onboarding_completed) {
+      if (user.onboarding_enabled && !setupProgress.all_complete) {
         setShowOnboarding(true);
       }
     }
-  }, [user, onboardingAutoChecked]);
+  }, [user, setupProgress, onboardingAutoChecked]);
 
-  const closeOnboarding = async () => {
+  const closeOnboarding = () => {
     setShowOnboarding(false);
-    try {
-      await axios.patch('/api/auth/onboarding', { completed: true });
-      setUser((prev: any) => prev ? { ...prev, onboarding_completed: true } : prev);
-    } catch (err) {
-      console.error('Failed to save onboarding state', err);
-    }
   };
 
   const restartOnboarding = async () => {
     try {
-      await axios.patch('/api/auth/onboarding', { completed: false, enabled: true });
-      setUser((prev: any) => prev ? { ...prev, onboarding_completed: false, onboarding_enabled: true } : prev);
+      await axios.patch('/api/auth/onboarding', { enabled: true });
+      setUser((prev: any) => prev ? { ...prev, onboarding_enabled: true } : prev);
     } catch (err) {
       console.error('Failed to restart onboarding', err);
     }

@@ -7,6 +7,7 @@ const audienceListController = require('../controllers/audienceListController');
 const contactController = require('../controllers/contactController');
 const contactListController = require('../controllers/contactListController');
 const groupListController = require('../controllers/groupListController');
+const onboardingController = require('../controllers/onboardingController');
 const authController = require('../controllers/authController');
 const paymentController = require('../controllers/paymentController');
 const adminController = require('../controllers/adminController');
@@ -20,6 +21,7 @@ router.post('/auth/login', authController.login);
 router.get('/auth/me', requireAuth, authController.me);
 router.post('/auth/change-password', requireAuth, authController.changePassword);
 router.patch('/auth/onboarding', requireAuth, authController.updateOnboarding);
+router.get('/onboarding/progress', requireAuth, onboardingController.getProgress);
 
 // ── Paystack Payments ────────────────────────────────────────────────────────
 router.post('/payments/initialize', requireAuth, paymentController.initialize);

@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { X, MessageSquare, Users, Megaphone, ShieldAlert, Sparkles, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
 interface OnboardingWizardProps {
-  onClose: (dontShowAgain: boolean) => void;
+  // Whether this closes via X, "Skip Tour", or "Finish", it only ever dismisses this
+  // session's popup — whether it auto-shows again next login is driven entirely by real
+  // setup progress (see App.tsx), not by how this modal was closed.
+  onClose: () => void;
 }
 
 const STEPS = [
@@ -66,7 +69,7 @@ const OnboardingWizard = ({ onClose }: OnboardingWizardProps) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="glass-card w-full max-w-lg p-6 relative border border-slate-700/50 shadow-2xl">
         <button
-          onClick={() => onClose(true)}
+          onClick={() => onClose()}
           className="absolute top-4 right-4 text-slate-500 hover:text-white cursor-pointer"
           title="Skip tour"
         >
@@ -107,7 +110,7 @@ const OnboardingWizard = ({ onClose }: OnboardingWizardProps) => {
 
         <div className="flex items-center justify-between gap-3">
           <button
-            onClick={() => onClose(true)}
+            onClick={() => onClose()}
             className="text-xs font-semibold text-slate-500 hover:text-slate-300 cursor-pointer"
           >
             Skip Tour
@@ -131,7 +134,7 @@ const OnboardingWizard = ({ onClose }: OnboardingWizardProps) => {
               </button>
             ) : (
               <button
-                onClick={() => onClose(true)}
+                onClick={() => onClose()}
                 className="flex items-center gap-1 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg cursor-pointer"
               >
                 <Check size={14} /> Finish

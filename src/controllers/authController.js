@@ -46,6 +46,11 @@ const authController = {
                     subscription_status: 'active',
                     tier: 'trial',
                     trial_ends_at: trialEndsAt.toISOString(),
+                    // Matches the users table column defaults (onboarding_completed=0,
+                    // onboarding_enabled=1) so the onboarding wizard's auto-show check has
+                    // real data immediately instead of racing the follow-up /auth/me call.
+                    onboarding_completed: false,
+                    onboarding_enabled: true,
                     is_admin: email === (process.env.ADMIN_EMAIL || '')
                 }
             });
@@ -90,6 +95,8 @@ const authController = {
                     subscription_status: user.subscription_status,
                     tier: user.tier,
                     trial_ends_at: user.trial_ends_at,
+                    onboarding_completed: !!user.onboarding_completed,
+                    onboarding_enabled: user.onboarding_enabled !== 0,
                     is_admin: user.email === (process.env.ADMIN_EMAIL || '')
                 }
             });
