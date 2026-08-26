@@ -30,13 +30,13 @@ const STEPS = [
   {
     icon: Users,
     color: 'text-emerald-400 bg-emerald-500/10',
-    title: 'Step 2: Create an Audience List',
-    description: 'Group your WhatsApp target groups under a single audience list for quick scheduling.',
+    title: 'Step 2: Create a Group List',
+    description: 'Group your WhatsApp groups together so you can target them all at once when posting.',
     instructions: [
-      "Go to the Audience Lists page.",
-      "Click the '+ Add Audience List' button.",
-      "Provide a clear name (e.g., 'Real Estate Groups' or 'Marketing List').",
-      "Select the groups you want to associate with this audience list and click save."
+      "Go to the Audience page from the sidebar menu.",
+      "Open the 'Group Lists' tab and click '+ Create Group List'.",
+      "Give it a clear name (e.g., 'Marketing Groups' or 'Real Estate Leads').",
+      "Select which WhatsApp groups belong in it and click save."
     ],
     tip: "Only groups that your connected WhatsApp account is currently participating in will appear in the selection list.",
   },
@@ -47,7 +47,7 @@ const STEPS = [
     description: 'Create announcements, add spin-tax variations, and schedule campaigns.',
     instructions: [
       "Go to the Announcements page and click '+ New Announcement'.",
-      "Select your connected WhatsApp number and choose your Audience List.",
+      "Select your connected WhatsApp number and choose your target Group(s) or Group List.",
       "Upload media files and add text variations to cycle through during posts.",
       "Configure schedule timing (one-time or recurring) and click save."
     ],
