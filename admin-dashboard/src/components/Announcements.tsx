@@ -12,6 +12,12 @@ const API = '/api';
 // until OpenRouter usage is funded. Flip to true to re-show the toolbar.
 const AI_FEATURES_ENABLED = false;
 
+// Targeting is temporarily scoped to Groups/Group Lists/Audience Lists only. Contacts,
+// Contact Lists, and WhatsApp Status are built and working but hidden from the destination
+// picker for now. Flip these back to true to re-show their tabs.
+const CONTACTS_FEATURES_ENABLED = false;
+const WHATSAPP_STATUS_ENABLED = false;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface MediaFile { path: string; type: 'image' | 'video'; }
 interface Group { id: string; name: string; isGroup: boolean; }
@@ -1139,24 +1145,28 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   >
                     Groups ({form.target_groups.length})
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDestinationTab('contacts')}
-                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      destinationTab === 'contacts' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Contacts ({form.target_contacts.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDestinationTab('contact_lists')}
-                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      destinationTab === 'contact_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Contact Lists ({form.target_contact_lists.length})
-                  </button>
+                  {CONTACTS_FEATURES_ENABLED && (
+                    <button
+                      type="button"
+                      onClick={() => setDestinationTab('contacts')}
+                      className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        destinationTab === 'contacts' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Contacts ({form.target_contacts.length})
+                    </button>
+                  )}
+                  {CONTACTS_FEATURES_ENABLED && (
+                    <button
+                      type="button"
+                      onClick={() => setDestinationTab('contact_lists')}
+                      className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        destinationTab === 'contact_lists' ? 'bg-indigo-600 text-white shadow shadow-indigo-600/30' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Contact Lists ({form.target_contact_lists.length})
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setDestinationTab('group_lists')}
@@ -1175,15 +1185,17 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
                   >
                     Audience ({form.target_audience_lists.length})
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDestinationTab('status')}
-                    className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      destinationTab === 'status' ? 'bg-emerald-600 text-white shadow shadow-emerald-600/30' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    WA Status ({form.include_status ? 'ON' : 'OFF'})
-                  </button>
+                  {WHATSAPP_STATUS_ENABLED && (
+                    <button
+                      type="button"
+                      onClick={() => setDestinationTab('status')}
+                      className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        destinationTab === 'status' ? 'bg-emerald-600 text-white shadow shadow-emerald-600/30' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      WA Status ({form.include_status ? 'ON' : 'OFF'})
+                    </button>
+                  )}
                 </div>
 
                 {/* Tab 1: Groups */}
