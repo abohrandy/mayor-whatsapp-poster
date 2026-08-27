@@ -1379,21 +1379,37 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
               </div>
 
               {/* Footer */}
-              <div className="pt-4 border-t border-slate-700/50 flex justify-end gap-3">
-                <button type="button" onClick={closeModal}
-                  className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:text-white transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button type="button" onClick={handleSaveAndPostNow} disabled={submitting}
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-60 cursor-pointer">
-                  {submitting && <RefreshCw size={16} className="animate-spin" />}
-                  Post Now
-                </button>
-                <button type="submit" disabled={submitting}
-                  className="px-6 py-2 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-60 cursor-pointer">
-                  {submitting && <RefreshCw size={16} className="animate-spin" />}
-                  {editingId ? 'Save Changes' : 'Create Announcement'}
-                </button>
+              <div className="pt-4 border-t border-slate-700/50 space-y-2">
+                {/* While the request is in flight (which includes uploading any attached media),
+                    the buttons below are disabled/greyed out — this line explains why so it
+                    doesn't just look broken or unresponsive, especially for larger images/videos
+                    that can take a few seconds over a slow connection. */}
+                {submitting && (
+                  <p className="text-xs text-amber-400 flex items-center gap-1.5 justify-end">
+                    <RefreshCw size={12} className="animate-spin" />
+                    {newFiles.length > 0
+                      ? "Uploading your media — this can take a moment for large images or videos. Please don't close this window."
+                      : 'Saving your announcement — please wait.'}
+                  </p>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button type="button" onClick={closeModal} disabled={submitting}
+                    className="px-6 py-2 rounded-lg font-bold text-slate-400 hover:text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleSaveAndPostNow} disabled={submitting}
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
+                    {submitting && <RefreshCw size={16} className="animate-spin" />}
+                    {submitting ? (newFiles.length > 0 ? 'Uploading...' : 'Posting...') : 'Post Now'}
+                  </button>
+                  <button type="submit" disabled={submitting}
+                    className="px-6 py-2 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
+                    {submitting && <RefreshCw size={16} className="animate-spin" />}
+                    {submitting
+                      ? (newFiles.length > 0 ? 'Uploading...' : 'Saving...')
+                      : (editingId ? 'Save Changes' : 'Create Announcement')}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
