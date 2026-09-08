@@ -619,9 +619,34 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 		MediaBase64 string `json:"mediaBase64"`
 		MediaType   string `json:"mediaType"` // "image" | "video"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+	var mediaBytes []byte
+
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		// Media is streamed in as a multipart file part instead of a base64 JSON field,
+		// so the sender never has to buffer a base64-inflated copy of the whole file.
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid multipart body: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.From = r.FormValue("from")
+		req.To = r.FormValue("to")
+		req.Text = r.FormValue("text")
+		req.MediaType = r.FormValue("mediaType")
+
+		if file, _, err := r.FormFile("media"); err == nil {
+			defer file.Close()
+			data, readErr := io.ReadAll(file)
+			if readErr != nil {
+				http.Error(w, fmt.Sprintf("Failed to read uploaded media: %v", readErr), http.StatusBadRequest)
+				return
+			}
+			mediaBytes = data
+		}
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if req.To == "" {
@@ -653,7 +678,9 @@ func handleSend(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
-	if req.MediaBase64 != "" {
+	if mediaBytes != nil {
+		err = sendMediaData(selectedSess.Client, jid, mediaBytes, req.Text, req.MediaType)
+	} else if req.MediaBase64 != "" {
 		data, decodeErr := base64.StdEncoding.DecodeString(req.MediaBase64)
 		if decodeErr != nil {
 			log.Printf("[Bridge] Failed to decode base64: %v", decodeErr)

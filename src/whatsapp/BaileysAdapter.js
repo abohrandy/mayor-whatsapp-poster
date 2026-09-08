@@ -1,4 +1,6 @@
 const axios = require('axios');
+const fs = require('fs');
+const FormData = require('form-data');
 
 class BaileysAdapter {
     constructor(bridgeUrl) {
@@ -81,14 +83,19 @@ class BaileysAdapter {
         }
     }
 
-    async sendMediaMessage(to, mediaBase64, caption = '', mediaType = 'image', from = null) {
+    async sendMediaMessage(to, mediaFilePath, caption = '', mediaType = 'image', from = null) {
         try {
-            await axios.post(`${this.bridgeUrl}/send`, {
-                from: from,
-                to: to,
-                text: caption,
-                mediaBase64: mediaBase64,
-                mediaType: mediaType
+            const form = new FormData();
+            if (from) form.append('from', from);
+            form.append('to', to);
+            form.append('text', caption);
+            form.append('mediaType', mediaType);
+            form.append('media', fs.createReadStream(mediaFilePath));
+
+            await axios.post(`${this.bridgeUrl}/send`, form, {
+                headers: form.getHeaders(),
+                maxBodyLength: Infinity,
+                maxContentLength: Infinity,
             });
             console.log(`[BaileysAdapter] Media (${mediaType}) sent from ${from || 'default'} to ${to}`);
             return true;

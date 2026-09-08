@@ -110,8 +110,7 @@ class WhatsAppService {
             throw new Error(`Media file not found: ${absPath}`);
         }
 
-        const mediaBase64 = fs.readFileSync(absPath, { encoding: 'base64' });
-        return await this.adapter.sendMediaMessage(groupId, mediaBase64, caption, mediaType, from);
+        return await this.adapter.sendMediaMessage(groupId, absPath, caption, mediaType, from);
     }
 
     /**
