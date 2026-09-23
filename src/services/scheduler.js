@@ -258,7 +258,11 @@ async function checkAndSendDue() {
         console.log(`[Scheduler] Found ${dueList.length} due announcement(s).`);
 
         for (const ann of dueList) {
-            await sendAnnouncement(ann, true);
+            try {
+                await sendAnnouncement(ann, true);
+            } catch (annErr) {
+                console.error(`[Scheduler] Error sending announcement #${ann.id} ("${ann.title}"):`, annErr);
+            }
         }
     } catch (error) {
         console.error('[Scheduler] Error in checkAndSendDue:', error);
@@ -317,9 +321,10 @@ async function sendAnnouncement(ann, advanceRibbon = false) {
         console.warn(msg);
         emitLog(ann.user_id, { type: 'warning', message: msg, timestamp: new Date().toISOString() });
         await logActivity('announcement_warning', msg, ann.user_id);
-        
+
         let daysOfWeek = [];
         try { daysOfWeek = JSON.parse(ann.recurrence_days_of_week || '[]'); } catch {}
+        const nextTry = computeNextPostAt(ann.post_time, ann.is_recurring, ann.recurrence_days, daysOfWeek);
         await db.run(`UPDATE announcements SET next_post_at = ? WHERE id = ?`, [nextTry, ann.id]);
         return;
     }
