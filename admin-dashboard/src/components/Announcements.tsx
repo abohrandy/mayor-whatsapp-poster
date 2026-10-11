@@ -50,6 +50,17 @@ const parseJSON = <T,>(str: string, fallback: T): T => {
   try { return JSON.parse(str); } catch { return fallback; }
 };
 
+// next_post_at is stored as a UTC ISO string; datetime-local/date inputs expect local time.
+// Slicing the ISO string directly shows UTC and shifts the schedule on every re-save.
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const toLocalDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const toLocalDateTimeInput = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${toLocalDate(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
 const formatNextPost = (dt: string | null) => {
   if (!dt) return '—';
   return new Date(dt).toLocaleString('en-GB', {
@@ -325,9 +336,9 @@ const Announcements = ({ openNewModalOnMount, setOpenNewModalOnMount }: { openNe
         is_recurring: !!ann.is_recurring,
         recurrence_days: ann.recurrence_days || 7,
         recurrence_days_of_week: parseJSON<number[]>(ann.recurrence_days_of_week || '[]', []),
-        start_date: ann.next_post_at ? ann.next_post_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        start_date: ann.next_post_at ? toLocalDateTimeInput(ann.next_post_at).slice(0, 10) : toLocalDate(new Date()),
         post_time: ann.post_time || '08:00',
-        next_post_at: ann.next_post_at ? ann.next_post_at.slice(0, 16) : '',
+        next_post_at: toLocalDateTimeInput(ann.next_post_at),
         target_groups: parseJSON<string[]>(ann.target_groups, []),
         target_contacts: parseJSON<number[]>(ann.target_contacts || '[]', []),
         target_contact_lists: parseJSON<number[]>(ann.target_contact_lists || '[]', []),

@@ -22,6 +22,9 @@ app.use(express.json());
 app.use(fileUpload({
     createParentPath: true,
     limits: { fileSize: 100 * 1024 * 1024 }, // 100MB (videos can be large)
+    // Without this, oversized files are silently truncated and saved as corrupt media.
+    abortOnLimit: true,
+    responseOnLimit: JSON.stringify({ error: 'A media file is too large (max 100MB).' }),
 }));
 
 // Static files for uploads
