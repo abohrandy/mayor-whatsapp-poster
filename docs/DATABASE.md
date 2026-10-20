@@ -28,7 +28,7 @@ The database is managed via SQLite (`whatsapp_poster.db`) with dynamic schema mi
 | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Session DB ID |
 | `user_id` | INTEGER | FOREIGN KEY(users) | Owner User ID |
 | `session_id` | TEXT | UNIQUE NOT NULL | Session identifier string |
-| `last_contacts_synced_at` | DATETIME | DEFAULT NULL | Timestamp of last contact harvesting sync |
+| `last_contacts_synced_at` | DATETIME | DEFAULT NULL | Unused (contact harvesting was removed; always NULL) |
 | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | Session creation timestamp |
 
 ---

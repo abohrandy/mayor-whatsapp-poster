@@ -4,7 +4,7 @@ const jobLogger = require('./JobLogger');
 class JobQueue {
     /**
      * Enqueue a new Job.
-     * @param {string} jobType - 'announcement_dispatch'|'contact_sync'|'status_dispatch'
+     * @param {string} jobType - 'announcement_dispatch'|'status_dispatch'
      * @param {Object} payload
      * @param {number} [userId]
      * @param {number} [maxRetries=3]

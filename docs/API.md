@@ -21,8 +21,6 @@ All API routes require Authentication (`Authorization: Bearer <jwt_token>`) exce
 | `/api/whatsapp/status` | GET | Retrieve current session connection status |
 | `/api/whatsapp/qr` | GET | Get active session QR code base64 image |
 | `/api/whatsapp/groups` | GET | List WhatsApp groups associated with connected session |
-| `/api/whatsapp/sync-contacts` | POST | Trigger manual contact harvesting sync |
-| `/api/whatsapp/contact-sync-status` | GET | Check last contact sync timestamp and harvested count |
 | `/api/whatsapp/disconnect` | POST | Disconnect active WhatsApp session |
 
 ---
@@ -31,7 +29,7 @@ All API routes require Authentication (`Authorization: Bearer <jwt_token>`) exce
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/contacts` | GET / POST | List all harvested/custom contacts or create new contact |
+| `/api/contacts` | GET / POST | List custom contacts or create new contact |
 | `/api/contacts/:id` | GET / PUT / DELETE | CRUD operations on individual contact |
 | `/api/contacts/import` | POST | Bulk import contacts from CSV/vCard |
 | `/api/contact-lists` | GET / POST | List or create contact segment lists |

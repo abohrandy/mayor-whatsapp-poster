@@ -117,18 +117,6 @@ class BaileysAdapter {
             return [];
         }
     }
-
-    async getContacts(from = null) {
-        try {
-            const res = await axios.get(`${this.bridgeUrl}/contacts`, {
-                params: { from }
-            });
-            return res.data || [];
-        } catch (err) {
-            console.error(`[BaileysAdapter] Failed to fetch contacts for ${from || 'default'}:`, err.message);
-            return [];
-        }
-    }
 }
 
 module.exports = BaileysAdapter;

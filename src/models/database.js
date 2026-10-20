@@ -562,6 +562,32 @@ async function initDb() {
         } catch (err) {}
     }
 
+    // WhatsApp contact harvesting was removed (the app now only posts to groups). Purge anything
+    // it left behind: contacts tagged whatsapp_synced, their references inside contact lists, the
+    // per-session sync timestamps, and any queued contact_sync jobs. Manually-created contacts are
+    // kept. Idempotent: once nothing carries the tag this is a no-op, so it is safe on every start.
+    try {
+        const harvested = await db.all("SELECT id FROM contacts WHERE tags LIKE '%whatsapp_synced%'");
+        if (harvested.length > 0) {
+            const harvestedIds = new Set(harvested.map(c => c.id));
+            const lists = await db.all('SELECT id, contact_ids FROM contact_lists');
+            for (const list of lists) {
+                let ids = [];
+                try { ids = JSON.parse(list.contact_ids || '[]'); } catch { ids = []; }
+                const kept = ids.filter(id => !harvestedIds.has(Number(id)));
+                if (kept.length !== ids.length) {
+                    await db.run('UPDATE contact_lists SET contact_ids = ? WHERE id = ?', [JSON.stringify(kept), list.id]);
+                }
+            }
+            await db.run("DELETE FROM contacts WHERE tags LIKE '%whatsapp_synced%'");
+            console.log(`[Database] Purged ${harvested.length} harvested WhatsApp contacts.`);
+        }
+        await db.run('UPDATE whatsapp_sessions SET last_contacts_synced_at = NULL WHERE last_contacts_synced_at IS NOT NULL');
+        await db.run("DELETE FROM jobs WHERE job_type = 'contact_sync'");
+    } catch (err) {
+        console.error('[Database] Failed to purge harvested WhatsApp contacts:', err);
+    }
+
     // Assign any historical orphan records to the first registered user
     try {
         const firstUser = await db.get('SELECT id FROM users ORDER BY id ASC LIMIT 1');

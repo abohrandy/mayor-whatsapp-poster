@@ -35,11 +35,11 @@ The Mayor WhatsApp Automation SaaS is built on a modular, service-oriented archi
 
 - **`WhatsAppService` (`src/whatsapp/WhatsAppService.js`)**:
   - Unified facade wrapping all WhatsApp operations across the application.
-  - Manages message sending (text, media, status), contact harvesting, session lifecycle, and group fetching.
+  - Manages message sending (text, media, status), session lifecycle, and group fetching.
 - **`BaileysAdapter` (`src/whatsapp/BaileysAdapter.js`)**:
   - Low-level adapter encapsulating all direct HTTP calls to the Go bridge / Baileys socket microservice (`http://127.0.0.1:8080`).
 - **`SessionManager` (`src/whatsapp/SessionManager.js`)**:
-  - Manages active user sessions, connection state persistence, reconnection backoffs, and background harvesting initialization upon QR connection.
+  - Manages active user sessions, connection state persistence, reconnection backoffs.
 
 ---
 
@@ -62,7 +62,7 @@ The Mayor WhatsApp Automation SaaS is built on a modular, service-oriented archi
   1. `automation`: Job lifecycle & target expansion.
   2. `whatsapp`: Socket calls & JID delivery.
   3. `ai`: AI caption processing & variation selection.
-  4. `sync`: Contact & group harvesting logs.
+  4. `sync`: Group sync logs.
   5. `error`: Stack traces & failure causes.
 
 ---

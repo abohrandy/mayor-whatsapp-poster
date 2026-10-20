@@ -63,12 +63,6 @@ class SessionManager {
                         } catch (err) {
                             console.error('[SessionManager] Failed to send connected email:', err);
                         }
-
-                        const whatsappService = require('./index');
-                        setTimeout(() => {
-                            whatsappService.syncContacts(newSess.id, userId)
-                                .catch(err => console.error('[SessionManager] Auto contact harvest error:', err));
-                        }, 5000);
                     }
                 }
             }

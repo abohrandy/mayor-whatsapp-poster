@@ -85,6 +85,18 @@ func main() {
 	}
 	dbContainer = container
 
+	// This app only posts to groups and no longer reads the address book. whatsmeow caches a
+	// copy of each linked phone's contacts in whatsmeow_contacts, so clear it on every start.
+	// Nothing in the bridge reads it back, and it is safe to be empty.
+	if sqldb, err := sql.Open("sqlite3", dbPath); err == nil {
+		if res, err := sqldb.Exec("DELETE FROM whatsmeow_contacts"); err == nil {
+			if n, _ := res.RowsAffected(); n > 0 {
+				log.Printf("[Bridge] Purged %d cached WhatsApp contacts from the session database.", n)
+			}
+		}
+		sqldb.Close()
+	}
+
 	// Load existing sessions from database
 	devices, err := dbContainer.GetAllDevices(context.Background())
 	if err != nil {
@@ -104,7 +116,6 @@ func main() {
 	mux.HandleFunc("/session/delete", handleDeleteSession)
 	mux.HandleFunc("/send", handleSend)
 	mux.HandleFunc("/groups", handleGroups)
-	mux.HandleFunc("/contacts", handleContacts)
 	mux.HandleFunc("/join", handleJoinGroup)
 
 	server := &http.Server{
@@ -538,67 +549,6 @@ func handleGroups(w http.ResponseWriter, r *http.Request) {
 			Name:    g.Name,
 			IsGroup: true,
 		})
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(list)
-}
-
-func handleContacts(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("[Bridge Panic] handleContacts error: %v", err)
-			http.Error(w, "Internal bridge error", http.StatusInternalServerError)
-		}
-	}()
-
-	from := r.URL.Query().Get("from")
-	selectedSess := findSession(from)
-
-	if selectedSess == nil || selectedSess.Client == nil || selectedSess.Client.Store == nil {
-		http.Error(w, "Session not found or not connected", http.StatusNotFound)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	contacts, err := selectedSess.Client.Store.Contacts.GetAllContacts(ctx)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch contacts: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	type ContactItem struct {
-		JID          string `json:"jid"`
-		PhoneNumber  string `json:"phoneNumber"`
-		Name         string `json:"name"`
-		PushName     string `json:"pushName"`
-		BusinessName string `json:"businessName"`
-	}
-
-	var list []ContactItem = make([]ContactItem, 0)
-	for jid, info := range contacts {
-		if jid.Server == types.DefaultUserServer {
-			name := info.FullName
-			if name == "" {
-				name = info.BusinessName
-			}
-			if name == "" {
-				name = info.PushName
-			}
-			if name == "" {
-				name = jid.User
-			}
-
-			list = append(list, ContactItem{
-				JID:          jid.String(),
-				PhoneNumber:  "+" + jid.User,
-				Name:         name,
-				PushName:     info.PushName,
-				BusinessName: info.BusinessName,
-			})
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

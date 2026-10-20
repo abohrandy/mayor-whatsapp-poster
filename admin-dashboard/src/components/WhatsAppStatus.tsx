@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-    QrCode, RefreshCw, History, Send, Plus, Trash2, Link2, Users, Smartphone, Download, Share2,
+    QrCode, RefreshCw, History, Send, Plus, Trash2, Link2, Smartphone, Download, Share2,
     CheckCircle2, AlertTriangle, WifiOff, X, ChevronDown
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -125,13 +125,8 @@ const WhatsAppStatus = () => {
     const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
     const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
     const [sendingStates, setSendingStates] = useState<Record<string, boolean>>({});
-    const [syncingContacts, setSyncingContacts] = useState<Record<string, boolean>>({});
     const [testOpen, setTestOpen] = useState<Record<string, boolean>>({});
     const [testTargets, setTestTargets] = useState<Record<string, string>>({});
-    const [contactSyncInfo, setContactSyncInfo] = useState<{ lastSyncedAt: string | null; syncedCount: number }>({
-        lastSyncedAt: null,
-        syncedCount: 0
-    });
 
     const addLog = (msg: string, type: LogEntry['type'] = 'info') => {
         setLogs(prev => [{ time: new Date().toLocaleTimeString(), msg, type }, ...prev].slice(0, MAX_LOGS));
@@ -143,7 +138,6 @@ const WhatsAppStatus = () => {
 
         // Initial fetch
         fetchSessions();
-        fetchSyncStatus();
 
         // Socket listeners
         socket.on('whatsapp_status', (data) => {
@@ -180,29 +174,7 @@ const WhatsAppStatus = () => {
         }
     };
 
-    const fetchSyncStatus = async () => {
-        try {
-            const res = await axios.get('/api/whatsapp/contact-sync-status');
-            setContactSyncInfo(res.data);
-        } catch (e) {}
-    };
-
     const errText = (error: any) => error.response?.data?.error || error.message;
-
-    const handleSyncContacts = async (sessionId: string) => {
-        setSyncingContacts(prev => ({ ...prev, [sessionId]: true }));
-        try {
-            const res = await axios.post('/api/whatsapp/sync-contacts', { session_id: sessionId });
-            addLog(`Harvested ${res.data.count} contacts from WhatsApp session ${sessionId}`, 'success');
-            setNotice({ type: 'success', text: `Synced ${res.data.count} contacts.` });
-            fetchSyncStatus();
-        } catch (error: any) {
-            addLog(`Failed to harvest contacts for ${sessionId}: ${errText(error)}`, 'error');
-            setNotice({ type: 'error', text: `Contact sync failed: ${errText(error)}` });
-        } finally {
-            setSyncingContacts(prev => ({ ...prev, [sessionId]: false }));
-        }
-    };
 
     const handleCreateSession = async () => {
         setCreating(true);
@@ -623,24 +595,6 @@ const WhatsAppStatus = () => {
                                                     </div>
                                                 </div>
                                             )}
-
-                                            <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                                <div className="flex items-start gap-3">
-                                                    <Users size={16} className="text-slate-400 mt-0.5 shrink-0" />
-                                                    <div>
-                                                        <div className="text-sm font-medium text-white">Contacts</div>
-                                                        <div className="text-xs text-slate-400 mt-0.5">
-                                                            {contactSyncInfo.lastSyncedAt
-                                                                ? `Last synced ${new Date(contactSyncInfo.lastSyncedAt).toLocaleString()} · ${contactSyncInfo.syncedCount.toLocaleString()} contacts`
-                                                                : 'Not synced yet'}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <button onClick={() => handleSyncContacts(sess.id)} disabled={syncingContacts[sess.id]} className={secondaryBtn}>
-                                                    <RefreshCw size={14} className={syncingContacts[sess.id] ? 'animate-spin' : ''} />
-                                                    {syncingContacts[sess.id] ? 'Syncing...' : 'Sync contacts'}
-                                                </button>
-                                            </div>
 
                                             <div className="p-4 sm:p-5 space-y-2">
                                                 <label htmlFor={`join-${sess.id}`} className="text-sm font-medium text-white flex items-center gap-2">

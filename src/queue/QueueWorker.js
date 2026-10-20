@@ -1,6 +1,5 @@
 const jobQueue = require('./JobQueue');
 const announcementJobHandler = require('./handlers/AnnouncementJobHandler');
-const syncJobHandler = require('./handlers/SyncJobHandler');
 
 class QueueWorker {
     constructor() {
@@ -46,9 +45,6 @@ class QueueWorker {
                 case 'announcement_dispatch':
                 case 'status_dispatch':
                     await announcementJobHandler.handle(job);
-                    break;
-                case 'contact_sync':
-                    await syncJobHandler.handle(job);
                     break;
                 default:
                     throw new Error(`Unknown job_type: ${job.job_type}`);

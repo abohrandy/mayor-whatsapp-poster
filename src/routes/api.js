@@ -61,62 +61,6 @@ router.get('/whatsapp/status', requireAuth, requireSubscription, async (req, res
     }
 });
 
-router.post('/whatsapp/sync-contacts', requireAuth, requireSubscription, async (req, res) => {
-    try {
-        const { session_id } = req.body;
-        const db = await require('../models/database').getDb();
-        let targetSessionJid = null;
-        if (session_id) {
-            const mapping = await db.get('SELECT session_id FROM whatsapp_sessions WHERE user_id = ? AND session_id = ?', [req.user.id, session_id]);
-            if (mapping) targetSessionJid = mapping.session_id;
-        }
-        if (!targetSessionJid) {
-            // Prefer a session the bridge currently reports as CONNECTED — a stale, never-
-            // connected "temp_..." row from an abandoned QR-scan attempt can otherwise be
-            // picked over the user's real, working session.
-            const mappings = await db.all('SELECT session_id FROM whatsapp_sessions WHERE user_id = ?', [req.user.id]);
-            const mappedIds = new Set(mappings.map(m => m.session_id));
-            const liveStatus = waClient.getStatus();
-            const connSess = (liveStatus?.sessions || []).find(s => mappedIds.has(s.id) && s.status === 'CONNECTED');
-            targetSessionJid = connSess ? connSess.id : (mappings[0] && mappings[0].session_id);
-        }
-
-        if (!targetSessionJid) {
-            return res.status(400).json({ error: 'No active WhatsApp session found for your account. Please link your WhatsApp first.' });
-        }
-
-        const result = await waClient.syncContacts(targetSessionJid, req.user.id);
-        res.json({ message: 'WhatsApp contacts sync completed', ...result });
-    } catch (error) {
-        console.error('Error syncing contacts:', error);
-        const errMsg = error.response?.data || error.message || 'WhatsApp bridge error';
-        const userMsg = typeof errMsg === 'string' && errMsg.includes('Session not found')
-            ? 'WhatsApp session is not connected. Please scan QR code on the WhatsApp Status page to link your account.'
-            : (typeof errMsg === 'string' ? errMsg : 'Failed to communicate with WhatsApp bridge. Make sure your WhatsApp session is connected.');
-        res.status(400).json({ error: userMsg });
-    }
-});
-
-router.get('/whatsapp/contact-sync-status', requireAuth, requireSubscription, async (req, res) => {
-    try {
-        const db = await require('../models/database').getDb();
-        const session = await db.get(
-            'SELECT last_contacts_synced_at FROM whatsapp_sessions WHERE user_id = ? ORDER BY last_contacts_synced_at DESC LIMIT 1',
-            [req.user.id]
-        );
-        const contactCount = await db.get(
-            "SELECT COUNT(*) as count FROM contacts WHERE user_id = ? AND tags LIKE '%whatsapp_synced%'",
-            [req.user.id]
-        );
-        res.json({
-            lastSyncedAt: session?.last_contacts_synced_at || null,
-            syncedCount: contactCount?.count || 0
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // ── AI Credit System & Assistant ────────────────────────────────────────────────
 const aiService = require('../ai');
 const { aiCreditManager } = require('../ai');

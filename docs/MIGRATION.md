@@ -18,7 +18,7 @@ All SQLite table migrations are handled idempotently inside `src/models/database
    - Added `target_audience_lists` (`TEXT DEFAULT '[]'`).
    - Added `include_status` (`INTEGER DEFAULT 0`).
    - Added `caption_variations` (`TEXT DEFAULT '[]'`) and `caption_index` (`INTEGER DEFAULT 0`).
-3. **Contact Harvesting & Session Migration**:
+3. **Contact Tables & Session Migration** (WhatsApp contact harvesting was later removed; harvested contacts are purged on startup):
    - Added `last_contacts_synced_at` column to `whatsapp_sessions`.
    - Added `contacts`, `contact_lists`, and `contact_list_members` tables.
 4. **AI Credit & Super Admin Telemetry Migration**:
