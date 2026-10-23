@@ -7,3 +7,9 @@ uploads/*
 **/.wwebjs_auth*/
 **/node_modules/
 **/dist/
+
+# WhatsApp bridge local session credentials and build output
+whatsapp-bridge/*.db
+whatsapp-bridge/*.db-shm
+whatsapp-bridge/*.db-wal
+whatsapp-bridge/*.exe
